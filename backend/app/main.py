@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
 from app.core.config import settings
+from app.db.schema_compat import ensure_accounts_columns
+from app.db.session import engine
 
 app = FastAPI(title=settings.app_name, version='4.0.0')
 app.add_middleware(
@@ -18,3 +20,8 @@ app.include_router(api_router)
 @app.get('/health')
 def health():
     return {'status': 'ok'}
+
+
+@app.on_event('startup')
+def startup_schema_checks():
+    ensure_accounts_columns(engine)
