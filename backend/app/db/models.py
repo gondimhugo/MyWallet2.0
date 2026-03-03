@@ -79,6 +79,10 @@ class Account(Base):
     bank: Mapped[str] = mapped_column(String(120), default="")
     account_type: Mapped[str] = mapped_column(String(50), default="Corrente")
     card_types: Mapped[str] = mapped_column(String(255), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    credit_limit: Mapped[float] = mapped_column(Float, default=0)
+    close_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     balance: Mapped[float] = mapped_column(Float, default=0)
 
     user: Mapped[User] = relationship(back_populates="accounts")

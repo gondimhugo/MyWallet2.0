@@ -6,14 +6,15 @@ ACCOUNT_COLUMNS = {
     "bank": "TEXT NOT NULL DEFAULT ''",
     "account_type": "TEXT NOT NULL DEFAULT 'Corrente'",
     "card_types": "TEXT NOT NULL DEFAULT ''",
+    "notes": "TEXT NOT NULL DEFAULT ''",
+    "credit_limit": "FLOAT NOT NULL DEFAULT 0",
+    "close_day": "INTEGER",
+    "due_day": "INTEGER",
 }
 
 
 def ensure_accounts_columns(engine: Engine) -> None:
-    """Adds account columns introduced after initial release when missing.
-
-    This helps local/dev databases created before Alembic migration 0002.
-    """
+    """Adds account columns introduced after initial release when missing."""
     inspector = inspect(engine)
     if "accounts" not in inspector.get_table_names():
         return

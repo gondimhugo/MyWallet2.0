@@ -16,4 +16,4 @@ def test_ensure_accounts_columns_adds_missing_fields():
     ensure_accounts_columns(engine)
 
     cols = {c['name'] for c in inspect(engine).get_columns('accounts')}
-    assert {'id', 'user_id', 'name', 'balance', 'bank', 'account_type', 'card_types'}.issubset(cols)
+    assert {'id', 'user_id', 'name', 'balance', 'bank', 'account_type', 'card_types', 'notes', 'credit_limit', 'close_day', 'due_day'}.issubset(cols)
