@@ -1,3 +1,4 @@
+# accounts.py
 from uuid import UUID
 
 import logging
@@ -67,7 +68,14 @@ def sync_credit_card(db: Session, user_id, account_name: str, credit_enabled: bo
             card.close_day = close_day
             card.due_day = due_day
         else:
-            db.add(Card(user_id=user_id, name=account_name, close_day=close_day, due_day=due_day))
+            db.add(
+                Card(
+                    user_id=user_id,
+                    name=account_name,
+                    close_day=close_day,
+                    due_day=due_day,
+                )
+            )
     elif card:
         db.delete(card)
 
@@ -81,7 +89,11 @@ def list_accounts(db: Session = Depends(get_db), user: User = Depends(current_us
 
 
 @router.post("")
-def create_account(payload: AccountIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def create_account(
+    payload: AccountIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     try:
         data = payload.model_dump()
         card_types = data.get("card_types", [])
@@ -106,7 +118,12 @@ def create_account(payload: AccountIn, db: Session = Depends(get_db), user: User
 
 
 @router.put("/{item_id}")
-def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def update_account(
+    item_id: UUID,
+    payload: AccountIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     row = db.get(Account, item_id)
     if not row or row.user_id != user.id:
         raise HTTPException(404, "Conta não encontrada")
@@ -125,7 +142,9 @@ def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_
             setattr(row, k, v)
 
         if old_name != row.name:
-            old_card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == old_name)))
+            old_card = db.scalar(
+                select(Card).where(and_(Card.user_id == user.id, Card.name == old_name))
+            )
             if old_card:
                 old_card.name = row.name
 
@@ -142,10 +161,14 @@ def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_
 
 
 @router.delete("/{item_id}")
-def delete_account(item_id: UUID, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def delete_account(
+    item_id: UUID, db: Session = Depends(get_db), user: User = Depends(current_user)
+):
     row = db.get(Account, item_id)
     if row and row.user_id == user.id:
-        card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == row.name)))
+        card = db.scalar(
+            select(Card).where(and_(Card.user_id == user.id, Card.name == row.name))
+        )
         if card:
             db.delete(card)
         db.delete(row)
