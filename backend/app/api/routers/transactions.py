@@ -14,10 +14,6 @@ from app.services.finance import compute_invoice
 router = APIRouter()
 
 
-def _is_debit(method) -> bool:
-    return method in (Method.debito, "Débito", "debito")
-
-
 def _is_credit(method) -> bool:
     return method in (Method.credito, "Crédito", "credito")
 
@@ -38,8 +34,12 @@ def _is_invoice_payment(kind) -> bool:
     return kind in (TransactionKind.pagamento_fatura, "PagamentoFatura", "pagamento_fatura")
 
 
+def _is_credit_purchase(tx: Transaction | dict) -> bool:
+    return _is_credit(tx['method'] if isinstance(tx, dict) else tx.method) and _is_normal(tx['kind'] if isinstance(tx, dict) else tx.kind) and _is_out(tx['direction'] if isinstance(tx, dict) else tx.direction)
+
+
 def enrich_credit(db: Session, user: User, tx: dict):
-    if _is_credit(tx['method']) and _is_normal(tx['kind']) and _is_out(tx['direction']):
+    if _is_credit_purchase(tx):
         card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == tx['card'])))
         if not card:
             raise HTTPException(400, 'Cartão não encontrado para compra no crédito')
@@ -48,8 +48,12 @@ def enrich_credit(db: Session, user: User, tx: dict):
     return tx
 
 
-def apply_debit_balance(db: Session, user: User, tx: Transaction, reverse: bool = False):
-    if not _is_debit(tx.method) or not tx.account:
+def apply_account_balance(db: Session, user: User, tx: Transaction, reverse: bool = False):
+    if not tx.account:
+        return
+
+    # Purchases in normal credit should not change cash balance now (only on invoice payment)
+    if _is_credit_purchase(tx):
         return
 
     account = db.scalar(select(Account).where(and_(Account.user_id == user.id, Account.name == tx.account)))
@@ -72,7 +76,7 @@ def apply_credit_usage(db: Session, user: User, tx: Transaction, reverse: bool =
         return
 
     delta = 0.0
-    if _is_credit(tx.method) and _is_normal(tx.kind) and _is_out(tx.direction):
+    if _is_credit_purchase(tx):
         delta = tx.amount
     elif _is_invoice_payment(tx.kind) and _is_out(tx.direction):
         delta = -tx.amount
@@ -111,7 +115,7 @@ def create_transaction(payload: TransactionIn, db: Session = Depends(get_db), us
     data = enrich_credit(db, user, payload.model_dump())
     row = Transaction(user_id=user.id, **data)
     db.add(row)
-    apply_debit_balance(db, user, row)
+    apply_account_balance(db, user, row)
     apply_credit_usage(db, user, row)
     db.commit()
     db.refresh(row)
@@ -131,7 +135,7 @@ def installments(payload: InstallmentIn, db: Session = Depends(get_db), user: Us
         data = enrich_credit(db, user, data)
         row = Transaction(user_id=user.id, installment_group_id=group_id, installment_index=i + 1, installment_count=payload.installment_count, purchase_total=payload.amount, **data)
         db.add(row)
-        apply_debit_balance(db, user, row)
+        apply_account_balance(db, user, row)
         apply_credit_usage(db, user, row)
         rows.append(row)
     db.commit()
@@ -142,7 +146,7 @@ def installments(payload: InstallmentIn, db: Session = Depends(get_db), user: Us
 def delete_transaction(item_id: UUID, db: Session = Depends(get_db), user: User = Depends(current_user)):
     row = db.get(Transaction, item_id)
     if row and row.user_id == user.id:
-        apply_debit_balance(db, user, row, reverse=True)
+        apply_account_balance(db, user, row, reverse=True)
         apply_credit_usage(db, user, row, reverse=True)
         db.delete(row)
         db.commit()

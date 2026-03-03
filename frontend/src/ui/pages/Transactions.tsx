@@ -84,8 +84,8 @@ export function Transactions() {
   }, [tx.data, filterType])
 
   // Contas e cartões
-  const accountList = (accounts.data || []) as Array<{ id: string; name: string; card_types?: string[]; credit_limit?: number }>
-  const creditAccountList = accountList.filter((a) => (a.credit_limit || 0) > 0)
+  const accountList = (accounts.data || []) as Array<{ id: string; name: string; card_types?: string[]; credit_limit?: number; close_day?: number | null; due_day?: number | null }>
+  const creditAccountList = accountList.filter((a) => (a.credit_limit || 0) > 0 || (a.card_types || []).includes('Crédito') || (!!a.close_day && !!a.due_day))
   useEffect(() => {
     const usingCredit = form.method === 'Crédito' && form.direction === 'Saída'
     const sourceList = usingCredit ? creditAccountList : accountList
@@ -258,7 +258,7 @@ export function Transactions() {
             </select>
           ) : (
             <div className='muted' style={{ color: '#ef4444' }}>
-              ⚠️ {form.method === 'Crédito' && form.direction === 'Saída' ? 'Nenhuma conta com crédito e limite configurados' : 'Nenhuma conta cadastrada'}
+              ⚠️ {form.method === 'Crédito' && form.direction === 'Saída' ? 'Nenhuma conta com crédito configurado' : 'Nenhuma conta cadastrada'}
             </div>
           )}
           {form.method === 'Crédito' && form.direction === 'Saída' && (
