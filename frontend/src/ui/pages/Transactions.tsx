@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 
 interface TransactionForm {
@@ -17,18 +17,17 @@ interface TransactionForm {
 }
 
 const TRANSACTION_KINDS = {
-  Normal: 'Transação Normal (Débito/Crédito)',
-  Emprestimo: 'Empréstimo',
-  Dívida: 'Dívida',
+  Normal: 'Transação Normal',
+  PagamentoFatura: 'Pagamento de Fatura',
+  Salario: 'Salário',
 }
 
 const PAYMENT_METHODS = {
   Pix: '🔵 Pix',
-  Transferencia: '🏦 Transferência Bancária',
-  Debito: '💳 Débito',
-  Credito: '💳 Crédito',
+  Transferência: '🏦 Transferência Bancária',
+  Débito: '💳 Débito',
+  Crédito: '💳 Crédito',
   Dinheiro: '💵 Dinheiro',
-  Boleto: '📋 Boleto',
 }
 
 const initial: TransactionForm = {
@@ -52,13 +51,27 @@ export function Transactions() {
 
   const tx = useQuery({ queryKey: ['tx'], queryFn: () => api.request('/transactions') })
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api.request('/accounts') })
-  const cards = useQuery({ queryKey: ['cards'], queryFn: () => api.request('/cards') })
 
   const create = useMutation({
-    mutationFn: () => api.request('/transactions', { method: 'POST', body: JSON.stringify(form) }),
+    mutationFn: () => {
+      const payload = {
+        ...form,
+        card: form.method === 'Crédito' && form.direction === 'Saída' ? form.account : '',
+      }
+      return api.request('/transactions', { method: 'POST', body: JSON.stringify(payload) })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tx'] })
-      setForm(initial)
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      setForm({ ...initial, date: new Date().toISOString().slice(0, 10) })
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.request(`/transactions/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tx'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
     },
   })
 
@@ -71,8 +84,20 @@ export function Transactions() {
   }, [tx.data, filterType])
 
   // Contas e cartões
-  const accountList = (accounts.data || []) as Array<{ id: string; name: string }>
-  const cardList = (cards.data || []) as Array<{ id: string; name: string }>
+  const accountList = (accounts.data || []) as Array<{ id: string; name: string; card_types?: string[]; credit_limit?: number }>
+  const creditAccountList = accountList.filter((a) => (a.credit_limit || 0) > 0)
+  useEffect(() => {
+    const usingCredit = form.method === 'Crédito' && form.direction === 'Saída'
+    const sourceList = usingCredit ? creditAccountList : accountList
+
+    if (sourceList.length === 0) return
+
+    const exists = sourceList.some((a) => a.name === form.account)
+    if (!exists) {
+      setForm((prev) => ({ ...prev, account: sourceList[0].name }))
+    }
+  }, [form.method, form.direction, form.account, accountList, creditAccountList])
+
 
   return (
     <div>
@@ -168,14 +193,14 @@ export function Transactions() {
               🛒 Compras normais em débito, dinheiro ou crédito. Crédito aparecerá em Faturas
             </div>
           )}
-          {form.kind === 'Emprestimo' && (
+          {form.kind === 'PagamentoFatura' && (
             <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#7c2d12', background: '#fef3c7', padding: '8px 12px', borderRadius: '6px' }}>
-              🏦 Dinheiro emprestado de alguém ou instituição
+              💳 Use para registrar pagamento manual de fatura
             </div>
           )}
-          {form.kind === 'Dívida' && (
-            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#7c2d12', background: '#fef3c7', padding: '8px 12px', borderRadius: '6px' }}>
-              💳 Dívida pessoal com uma pessoa ou instituição
+          {form.kind === 'Salario' && (
+            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#065f46', background: '#ecfdf5', padding: '8px 12px', borderRadius: '6px' }}>
+              💰 Entrada de salário
             </div>
           )}
         </div>
@@ -207,8 +232,10 @@ export function Transactions() {
 
         {/* Conta */}
         <div style={{ marginTop: '16px' }}>
-          <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>🏦 Conta:</label>
-          {accountList.length > 0 ? (
+          <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+            🏦 Conta {form.method === 'Crédito' && form.direction === 'Saída' ? '(com crédito habilitado)' : ''}:
+          </label>
+          {(form.method === 'Crédito' && form.direction === 'Saída' ? creditAccountList : accountList).length > 0 ? (
             <select
               value={form.account}
               onChange={(e) => setForm({ ...form, account: e.target.value })}
@@ -219,53 +246,27 @@ export function Transactions() {
                 background: 'white',
                 cursor: 'pointer',
                 width: '100%',
-                maxWidth: '400px',
+                maxWidth: '420px',
               }}
             >
-              {accountList.map((acc) => (
+              {(form.method === 'Crédito' && form.direction === 'Saída' ? creditAccountList : accountList).map((acc) => (
                 <option key={acc.id || acc.name} value={acc.name}>
                   {acc.name}
+                  {form.method === 'Crédito' && form.direction === 'Saída' ? ` (limite: R$ ${(acc.credit_limit || 0).toFixed(2)})` : ''}
                 </option>
               ))}
             </select>
           ) : (
-            <div className='muted' style={{ color: '#ef4444' }}>⚠️ Nenhuma conta cadastrada</div>
+            <div className='muted' style={{ color: '#ef4444' }}>
+              ⚠️ {form.method === 'Crédito' && form.direction === 'Saída' ? 'Nenhuma conta com crédito e limite configurados' : 'Nenhuma conta cadastrada'}
+            </div>
+          )}
+          {form.method === 'Crédito' && form.direction === 'Saída' && (
+            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#0284c7', background: '#f0f9ff', padding: '8px 12px', borderRadius: '6px' }}>
+              ℹ️ O cartão é vinculado automaticamente à conta selecionada para a fatura e controle de limite disponível.
+            </div>
           )}
         </div>
-
-        {/* Cartão (se método for crédito) */}
-        {form.method === 'Credito' && (
-          <div style={{ marginTop: '16px' }}>
-            <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>💳 Cartão de Crédito:</label>
-            {cardList.length > 0 ? (
-              <select
-                value={form.card}
-                onChange={(e) => setForm({ ...form, card: e.target.value })}
-                style={{
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #e5e7eb',
-                  background: 'white',
-                  cursor: 'pointer',
-                  width: '100%',
-                  maxWidth: '400px',
-                }}
-              >
-                <option value=''>Selecione um cartão...</option>
-                {cardList.map((card) => (
-                  <option key={card.id || card.name} value={card.name}>
-                    {card.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className='muted' style={{ color: '#ef4444' }}>⚠️ Nenhum cartão cadastrado</div>
-            )}
-            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#0284c7', background: '#f0f9ff', padding: '8px 12px', borderRadius: '6px' }}>
-              ℹ️ Transações de crédito aparecerão automaticamente em <strong>Faturas</strong>, acumulando até o fechamento do ciclo
-            </div>
-          </div>
-        )}
 
         {/* Descrição */}
         <div style={{ marginTop: '16px' }}>
@@ -313,15 +314,15 @@ export function Transactions() {
         <div style={{ marginTop: '16px' }}>
           <button
             onClick={() => create.mutate()}
-            disabled={create.isPending || !form.description || form.amount <= 0}
+            disabled={create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0)}
             style={{
               background: '#10b981',
               color: 'white',
               padding: '12px 24px',
               fontWeight: 600,
               fontSize: '1rem',
-              cursor: create.isPending || !form.description || form.amount <= 0 ? 'not-allowed' : 'pointer',
-              opacity: create.isPending || !form.description || form.amount <= 0 ? 0.6 : 1,
+              cursor: create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0) ? 'not-allowed' : 'pointer',
+              opacity: create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0) ? 0.6 : 1,
             }}
             className='btn'
           >
@@ -367,12 +368,13 @@ export function Transactions() {
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>🔄 Método</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>📂 Categoria</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>💳 Fatura</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>🗑️ Ações</th>
             </tr>
           </thead>
           <tbody>
             {filteredTransactions.length > 0 ? (
               filteredTransactions.map((t: any) => (
-                <tr key={t.id} style={{ borderBottom: '1px solid #e5e7eb', hover: { background: '#f9fafb' } }}>
+                <tr key={t.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>{t.date}</td>
                   <td style={{ padding: '12px', color: '#0f172a', fontWeight: 500 }}>{t.description}</td>
                   <td style={{ padding: '12px', fontSize: '0.85rem' }}>
@@ -386,11 +388,28 @@ export function Transactions() {
                   <td style={{ padding: '12px', fontSize: '0.9rem' }}>{t.method}</td>
                   <td style={{ padding: '12px', color: '#6b7280' }}>{t.category || '—'}</td>
                   <td style={{ padding: '12px', fontSize: '0.85rem', color: '#6b7280' }}>{t.invoice_key || '—'}</td>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <button
+                      className='btn'
+                      onClick={() => t.id && remove.mutate(t.id)}
+                      disabled={!t.id || remove.isPending}
+                      style={{
+                        background: '#ef4444',
+                        color: 'white',
+                        padding: '6px 10px',
+                        fontSize: '0.85rem',
+                        opacity: !t.id || remove.isPending ? 0.6 : 1,
+                        cursor: !t.id || remove.isPending ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {remove.isPending ? 'Removendo...' : 'Remover'}
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>
+                <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>
                   Nenhum lançamento encontrado
                 </td>
               </tr>
