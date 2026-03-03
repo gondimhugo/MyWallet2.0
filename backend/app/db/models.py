@@ -136,7 +136,9 @@ class Transaction(Base):
     amount: Mapped[float] = mapped_column(Float)
     method: Mapped[Method] = mapped_column(Enum(Method), index=True)
     account: Mapped[str] = mapped_column(String(120), default="")
+    account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)
     card: Mapped[str] = mapped_column(String(120), default="")
+    card_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)
     kind: Mapped[TransactionKind] = mapped_column(
         Enum(TransactionKind), default=TransactionKind.normal
     )

@@ -54,9 +54,13 @@ export function Transactions() {
 
   const create = useMutation({
     mutationFn: () => {
+      const selectedAccount = accountList.find((a) => a.name === form.account)
+      const isCreditOut = form.method === 'Crédito' && form.direction === 'Saída'
       const payload = {
         ...form,
-        card: form.method === 'Crédito' && form.direction === 'Saída' ? form.account : '',
+        account_id: selectedAccount?.id || null,
+        card: isCreditOut ? form.account : '',
+        card_account_id: isCreditOut ? (selectedAccount?.id || null) : null,
       }
       return api.request('/transactions', { method: 'POST', body: JSON.stringify(payload) })
     },

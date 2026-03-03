@@ -28,3 +28,24 @@ def ensure_accounts_columns(engine: Engine) -> None:
     with engine.begin() as conn:
         for name, ddl in missing:
             conn.execute(text(f"ALTER TABLE accounts ADD COLUMN {name} {ddl}"))
+
+
+TRANSACTION_COLUMNS = {
+    "account_id": "TEXT",
+    "card_account_id": "TEXT",
+}
+
+
+def ensure_transactions_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if "transactions" not in inspector.get_table_names():
+        return
+
+    current_columns = {col["name"] for col in inspector.get_columns("transactions")}
+    missing = [(name, ddl) for name, ddl in TRANSACTION_COLUMNS.items() if name not in current_columns]
+    if not missing:
+        return
+
+    with engine.begin() as conn:
+        for name, ddl in missing:
+            conn.execute(text(f"ALTER TABLE transactions ADD COLUMN {name} {ddl}"))
