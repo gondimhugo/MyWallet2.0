@@ -2,12 +2,12 @@ import uuid
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user, get_db
-from app.db.models import Card, Method, Transaction, TransactionKind, User
+from app.db.models import Account, Card, Direction, Method, Transaction, TransactionKind, User
 from app.schemas.domain import InstallmentIn, TransactionIn
 from app.services.finance import compute_invoice
 
@@ -22,6 +22,21 @@ def enrich_credit(db: Session, user: User, tx: dict):
         key, close, due = compute_invoice(card, tx['date'])
         tx['invoice_key'], tx['invoice_close_iso'], tx['invoice_due_iso'] = key, close, due
     return tx
+
+
+def apply_debit_balance(db: Session, user: User, tx: Transaction, reverse: bool = False):
+    if tx.method != Method.debito or not tx.account:
+        return
+
+    account = db.scalar(select(Account).where(and_(Account.user_id == user.id, Account.name == tx.account)))
+    if not account:
+        return
+
+    delta = tx.amount if tx.direction == Direction.entrada else -tx.amount
+    if reverse:
+        delta *= -1
+
+    account.balance = round((account.balance or 0) + delta, 2)
 
 
 @router.get('/transactions')
@@ -49,6 +64,7 @@ def create_transaction(payload: TransactionIn, db: Session = Depends(get_db), us
     data = enrich_credit(db, user, payload.model_dump())
     row = Transaction(user_id=user.id, **data)
     db.add(row)
+    apply_debit_balance(db, user, row)
     db.commit()
     db.refresh(row)
     return row
@@ -67,6 +83,7 @@ def installments(payload: InstallmentIn, db: Session = Depends(get_db), user: Us
         data = enrich_credit(db, user, data)
         row = Transaction(user_id=user.id, installment_group_id=group_id, installment_index=i + 1, installment_count=payload.installment_count, purchase_total=payload.amount, **data)
         db.add(row)
+        apply_debit_balance(db, user, row)
         rows.append(row)
     db.commit()
     return rows
@@ -76,6 +93,7 @@ def installments(payload: InstallmentIn, db: Session = Depends(get_db), user: Us
 def delete_transaction(item_id: UUID, db: Session = Depends(get_db), user: User = Depends(current_user)):
     row = db.get(Transaction, item_id)
     if row and row.user_id == user.id:
+        apply_debit_balance(db, user, row, reverse=True)
         db.delete(row)
         db.commit()
     return {'ok': True}

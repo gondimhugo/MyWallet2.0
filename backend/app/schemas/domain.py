@@ -11,6 +11,10 @@ class AccountIn(BaseModel):
     bank: str = "bradesco"
     account_type: str = "Corrente"
     card_types: list[str] = []
+    notes: str = ""
+    credit_limit: float = 0
+    close_day: int | None = None
+    due_day: int | None = None
     balance: float = 0
 
 
