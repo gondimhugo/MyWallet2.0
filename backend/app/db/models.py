@@ -81,6 +81,7 @@ class Account(Base):
     card_types: Mapped[str] = mapped_column(String(255), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     credit_limit: Mapped[float] = mapped_column(Float, default=0)
+    credit_used: Mapped[float] = mapped_column(Float, default=0)
     close_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     balance: Mapped[float] = mapped_column(Float, default=0)

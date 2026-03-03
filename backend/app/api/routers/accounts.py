@@ -14,6 +14,8 @@ router = APIRouter()
 
 
 def serialize_account(row: Account) -> dict:
+    used = row.credit_used or 0
+    limit = row.credit_limit or 0
     return {
         "id": row.id,
         "name": row.name,
@@ -21,7 +23,9 @@ def serialize_account(row: Account) -> dict:
         "account_type": row.account_type,
         "card_types": row.card_types.split(",") if row.card_types else [],
         "notes": row.notes or "",
-        "credit_limit": row.credit_limit or 0,
+        "credit_limit": limit,
+        "credit_used": used,
+        "credit_available": round(limit - used, 2),
         "close_day": row.close_day,
         "due_day": row.due_day,
         "balance": row.balance,

@@ -8,6 +8,7 @@ ACCOUNT_COLUMNS = {
     "card_types": "TEXT NOT NULL DEFAULT ''",
     "notes": "TEXT NOT NULL DEFAULT ''",
     "credit_limit": "FLOAT NOT NULL DEFAULT 0",
+    "credit_used": "FLOAT NOT NULL DEFAULT 0",
     "close_day": "INTEGER",
     "due_day": "INTEGER",
 }

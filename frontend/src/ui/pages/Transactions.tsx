@@ -57,6 +57,7 @@ export function Transactions() {
     mutationFn: () => api.request('/transactions', { method: 'POST', body: JSON.stringify(form) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tx'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
       setForm({ ...initial, date: new Date().toISOString().slice(0, 10) })
     },
   })
@@ -65,6 +66,7 @@ export function Transactions() {
     mutationFn: (id: string) => api.request(`/transactions/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tx'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
     },
   })
 

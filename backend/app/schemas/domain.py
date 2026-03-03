@@ -13,6 +13,7 @@ class AccountIn(BaseModel):
     card_types: list[str] = []
     notes: str = ""
     credit_limit: float = 0
+    credit_used: float = 0
     close_day: int | None = None
     due_day: int | None = None
     balance: float = 0

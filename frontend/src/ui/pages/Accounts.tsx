@@ -85,6 +85,8 @@ export function Accounts() {
     notes?: string
     balance?: number
     credit_limit?: number
+    credit_used?: number
+    credit_available?: number
     close_day?: number | null
     due_day?: number | null
   }>
@@ -231,7 +233,7 @@ export function Accounts() {
               <div style={{ marginTop: '8px', fontWeight: 600, color: '#0f766e' }}>Saldo: R$ {(acc.balance || 0).toFixed(2)}</div>
               {hasCreditOnCard && (
                 <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#4f46e5' }}>
-                  Limite: R$ {(acc.credit_limit || 0).toFixed(2)} · Fecha: {acc.close_day || '-'} · Vence: {acc.due_day || '-'}
+                  Limite: R$ {(acc.credit_limit || 0).toFixed(2)} · Usado: R$ {(acc.credit_used || 0).toFixed(2)} · Disponível: R$ {(acc.credit_available ?? ((acc.credit_limit || 0) - (acc.credit_used || 0))).toFixed(2)} · Fecha: {acc.close_day || '-'} · Vence: {acc.due_day || '-'}
                 </div>
               )}
               {acc.notes && <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#475569' }}>🗒️ {acc.notes}</div>}
