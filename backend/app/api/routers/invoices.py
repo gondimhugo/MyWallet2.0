@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import current_user, get_db
 from app.db.models import Direction, Method, Transaction, TransactionKind, User
+from app.api.routers.transactions import apply_account_balance, apply_credit_usage
 from app.services.finance import invoice_index
 
 router = APIRouter()
@@ -31,5 +32,7 @@ def pay(payload: PayInvoiceIn, db: Session = Depends(get_db), user: User = Depen
         raise HTTPException(404, 'Fatura não encontrada')
     tx = Transaction(user_id=user.id, date=date.today(), direction=Direction.saida, amount=payload.amount, method=payload.method, account=payload.account, card=payload.card, kind=TransactionKind.pagamento_fatura, description=f'Pagamento {payload.invoice_key}', invoice_key=payload.invoice_key, invoice_due_iso=inv['invoice_due_iso'])
     db.add(tx)
+    apply_account_balance(db, user, tx)
+    apply_credit_usage(db, user, tx)
     db.commit()
     return {'ok': True}
