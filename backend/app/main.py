@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
 from app.core.config import settings
+from app.db.models import Base
 from app.db.schema_compat import ensure_accounts_columns
 from app.db.session import engine
 
@@ -24,4 +25,7 @@ def health():
 
 @app.on_event('startup')
 def startup_schema_checks():
+    # If the app is started without running migrations first (common in local/dev),
+    # ensure the base schema exists so writes actually persist instead of failing.
+    Base.metadata.create_all(bind=engine)
     ensure_accounts_columns(engine)
