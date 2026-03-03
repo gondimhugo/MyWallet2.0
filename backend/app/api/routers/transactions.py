@@ -1,106 +1,81 @@
+import uuid
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
+from uuid import UUID
 
-from app.api.deps import get_db, get_current_user
-from app.db.models import Transaction, User
-from app.schemas.transactions import TransactionCreate, TransactionRead, TransactionUpdate, SummaryResponse
-from app.services.money import to_cents, from_cents
-from app.services.summary import compute_summary
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, select
+from sqlalchemy.orm import Session
+
+from app.api.deps import current_user, get_db
+from app.db.models import Card, Method, Transaction, TransactionKind, User
+from app.schemas.domain import InstallmentIn, TransactionIn
+from app.services.finance import compute_invoice
 
 router = APIRouter()
 
-def _to_read(t: Transaction) -> TransactionRead:
-    return TransactionRead(
-        id=t.id,
-        date=t.date,
-        amount=from_cents(t.amount_cents),
-        type=t.type,
-        status=t.status,
-        description=t.description,
-        category_id=t.category_id,
-        account_id=t.account_id,
-    )
 
-@router.get("", response_model=list[TransactionRead])
-def list_transactions(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-    from_date: date | None = Query(default=None),
-    to_date: date | None = Query(default=None),
-):
-    q = select(Transaction).order_by(Transaction.date.desc())
-    if from_date:
-        q = q.where(Transaction.date >= from_date)
-    if to_date:
-        q = q.where(Transaction.date <= to_date)
-    txs = db.exec(q).all()
-    return [_to_read(t) for t in txs]
+def enrich_credit(db: Session, user: User, tx: dict):
+    if tx['method'] == Method.credito and tx['kind'] == TransactionKind.normal and tx['direction'].value == 'Saída':
+        card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == tx['card'])))
+        if not card:
+            raise HTTPException(400, 'Cartão não encontrado para compra no crédito')
+        key, close, due = compute_invoice(card, tx['date'])
+        tx['invoice_key'], tx['invoice_close_iso'], tx['invoice_due_iso'] = key, close, due
+    return tx
 
-@router.post("", response_model=TransactionRead)
-def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    t = Transaction(
-        date=payload.date,
-        amount_cents=to_cents(payload.amount),
-        type=payload.type,
-        status=payload.status,
-        description=payload.description,
-        category_id=payload.category_id,
-        account_id=payload.account_id,
-    )
-    db.add(t)
+
+@router.get('/transactions')
+def list_transactions(startISO: date | None = None, endISO: date | None = None, q: str | None = None, method: str | None = None, direction: str | None = None, account: str | None = None, card: str | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    stmt = select(Transaction).where(Transaction.user_id == user.id)
+    if startISO:
+        stmt = stmt.where(Transaction.date >= startISO)
+    if endISO:
+        stmt = stmt.where(Transaction.date <= endISO)
+    if method:
+        stmt = stmt.where(Transaction.method == method)
+    if direction:
+        stmt = stmt.where(Transaction.direction == direction)
+    if account:
+        stmt = stmt.where(Transaction.account == account)
+    if card:
+        stmt = stmt.where(Transaction.card == card)
+    if q:
+        stmt = stmt.where(Transaction.description.ilike(f'%{q}%'))
+    return db.scalars(stmt.order_by(Transaction.date.desc())).all()
+
+
+@router.post('/transactions')
+def create_transaction(payload: TransactionIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    data = enrich_credit(db, user, payload.model_dump())
+    row = Transaction(user_id=user.id, **data)
+    db.add(row)
     db.commit()
-    db.refresh(t)
-    return _to_read(t)
+    db.refresh(row)
+    return row
 
-@router.patch("/{tx_id}", response_model=TransactionRead)
-def update_transaction(tx_id: str, payload: TransactionUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    t = db.get(Transaction, tx_id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Transação não encontrada")
 
-    if payload.date is not None:
-        t.date = payload.date
-    if payload.amount is not None:
-        t.amount_cents = to_cents(payload.amount)
-    if payload.type is not None:
-        t.type = payload.type
-    if payload.status is not None:
-        t.status = payload.status
-    if payload.description is not None:
-        t.description = payload.description
-    if payload.category_id is not None:
-        t.category_id = payload.category_id
-    if payload.account_id is not None:
-        t.account_id = payload.account_id
-
-    db.add(t)
+@router.post('/transactions/installments')
+def installments(payload: InstallmentIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if payload.installment_count < 2:
+        raise HTTPException(400, 'parcelas deve ser >=2')
+    group_id = uuid.uuid4()
+    rows = []
+    for i in range(payload.installment_count):
+        data = payload.model_dump(exclude={'installment_count'})
+        data['amount'] = round(payload.amount / payload.installment_count, 2)
+        data['date'] = date(payload.date.year + ((payload.date.month + i - 1) // 12), ((payload.date.month + i - 1) % 12) + 1, min(payload.date.day, 28))
+        data = enrich_credit(db, user, data)
+        row = Transaction(user_id=user.id, installment_group_id=group_id, installment_index=i + 1, installment_count=payload.installment_count, purchase_total=payload.amount, **data)
+        db.add(row)
+        rows.append(row)
     db.commit()
-    db.refresh(t)
-    return _to_read(t)
+    return rows
 
-@router.delete("/{tx_id}")
-def delete_transaction(tx_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    t = db.get(Transaction, tx_id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Transação não encontrada")
-    db.delete(t)
-    db.commit()
-    return {"message": "ok"}
 
-@router.get("/summary", response_model=SummaryResponse)
-def summary(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-    from_date: date = Query(...),
-    to_date: date = Query(...),
-):
-    s = compute_summary(db, from_date, to_date)
-    return SummaryResponse(
-        from_date=from_date,
-        to_date=to_date,
-        income_total=s["income_total"],
-        expense_total=s["expense_total"],
-        net_total=s["net_total"],
-        by_category=s["by_category"],
-    )
+@router.delete('/transactions/{item_id}')
+def delete_transaction(item_id: UUID, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    row = db.get(Transaction, item_id)
+    if row and row.user_id == user.id:
+        db.delete(row)
+        db.commit()
+    return {'ok': True}

@@ -1,55 +1,108 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from enum import Enum
-from typing import Optional
-from uuid import UUID, uuid4
+import enum
+import uuid
+from datetime import date, datetime
 
-from sqlmodel import SQLModel, Field, Relationship, Column, String
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
-class TxType(str, Enum):
-    INCOME = "INCOME"
-    EXPENSE = "EXPENSE"
+class Base(DeclarativeBase):
+    pass
 
-class TxStatus(str, Enum):
-    OPEN = "OPEN"
-    PAID = "PAID"
 
-class User(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
-    email: str = Field(sa_column=Column(String(320), unique=True, index=True, nullable=False))
-    password_hash: str
-    is_active: bool = True
-    created_at: datetime = Field(default_factory=utcnow)
+class Direction(str, enum.Enum):
+    entrada = "Entrada"
+    saida = "Saída"
 
-class Account(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
-    name: str = Field(index=True)
-    created_at: datetime = Field(default_factory=utcnow)
 
-class Category(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
-    name: str = Field(index=True)
-    color: Optional[str] = None
-    created_at: datetime = Field(default_factory=utcnow)
+class Method(str, enum.Enum):
+    debito = "Débito"
+    pix = "Pix"
+    dinheiro = "Dinheiro"
+    transferencia = "Transferência"
+    credito = "Crédito"
 
-class Transaction(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
 
-    date: date = Field(index=True)
-    amount_cents: int = Field(index=True, ge=0)
-    type: TxType = Field(index=True)
-    status: TxStatus = Field(default=TxStatus.OPEN, index=True)
+class TransactionKind(str, enum.Enum):
+    normal = "Normal"
+    pagamento_fatura = "PagamentoFatura"
+    salario = "Salario"
 
-    description: str = ""
-    category_id: Optional[UUID] = Field(default=None, foreign_key="category.id")
-    account_id: Optional[UUID] = Field(default=None, foreign_key="account.id")
 
-    created_at: datetime = Field(default_factory=utcnow)
-    updated_at: datetime = Field(default_factory=utcnow)
+class SalaryMode(str, enum.Enum):
+    quinzenal = "quinzenal"
+    mensal = "mensal"
 
-    category: Optional[Category] = Relationship()
-    account: Optional[Account] = Relationship()
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    accounts: Mapped[list[Account]] = relationship(back_populates="user", cascade="all,delete")
+    cards: Mapped[list[Card]] = relationship(back_populates="user", cascade="all,delete")
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    balance: Mapped[float] = mapped_column(Float, default=0)
+
+    user: Mapped[User] = relationship(back_populates="accounts")
+
+
+class Card(Base):
+    __tablename__ = "cards"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    close_day: Mapped[int] = mapped_column(Integer)
+    due_day: Mapped[int] = mapped_column(Integer)
+
+    user: Mapped[User] = relationship(back_populates="cards")
+
+
+class SalaryProfile(Base):
+    __tablename__ = "salary_profiles"
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    monthly_salary: Mapped[float] = mapped_column(Float, default=0)
+    mode: Mapped[SalaryMode] = mapped_column(Enum(SalaryMode), default=SalaryMode.mensal)
+    day1: Mapped[int] = mapped_column(Integer, default=5)
+    day2: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    amount1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    amount2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    default_method: Mapped[Method] = mapped_column(Enum(Method), default=Method.transferencia)
+    default_account: Mapped[str] = mapped_column(String(120), default="Conta Corrente")
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    direction: Mapped[Direction] = mapped_column(Enum(Direction), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    method: Mapped[Method] = mapped_column(Enum(Method), index=True)
+    account: Mapped[str] = mapped_column(String(120), default="")
+    card: Mapped[str] = mapped_column(String(120), default="")
+    kind: Mapped[TransactionKind] = mapped_column(Enum(TransactionKind), default=TransactionKind.normal)
+    category: Mapped[str] = mapped_column(String(120), default="")
+    subcategory: Mapped[str] = mapped_column(String(120), default="")
+    description: Mapped[str] = mapped_column(String(255), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    invoice_key: Mapped[str] = mapped_column(String(100), default="")
+    invoice_close_iso: Mapped[str] = mapped_column(String(20), default="")
+    invoice_due_iso: Mapped[str] = mapped_column(String(20), default="")
+    installment_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    installment_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    installment_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    purchase_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

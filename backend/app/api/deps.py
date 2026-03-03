@@ -1,28 +1,32 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlmodel import Session, select
+from fastapi.security import HTTPBearer
+from jose import JWTError, jwt
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.core.security import decode_token
-from app.db.session import get_session
+from app.core.config import settings
 from app.db.models import User
+from app.db.session import SessionLocal
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+bearer = HTTPBearer()
 
-def get_db(session: Session = Depends(get_session)) -> Session:
-    return session
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_db():
+    db = SessionLocal()
     try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            raise ValueError("token type inválido")
-        email = payload.get("sub")
-        if not email:
-            raise ValueError("sub ausente")
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+        yield db
+    finally:
+        db.close()
 
-    user = db.exec(select(User).where(User.email == email)).first()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário inválido")
+
+def current_user(token=Depends(bearer), db: Session = Depends(get_db)) -> User:
+    try:
+        payload = jwt.decode(token.credentials, settings.secret_key, algorithms=["HS256"])
+        if payload.get("type") != "access":
+            raise ValueError("invalid")
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido") from exc
+    user = db.scalar(select(User).where(User.id == payload["sub"]))
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado")
     return user
