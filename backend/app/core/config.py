@@ -1,20 +1,15 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    app_name: str = "MyWallet API"
+    database_url: str = "sqlite:///./mywallet.db"
+    secret_key: str = "change-me"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_minutes: int = 60 * 24 * 7
+    cors_origins: str = "http://localhost:5173"
 
-    APP_ENV: str = "dev"
-    APP_NAME: str = "Gastos v3.0"
-    CORS_ORIGINS: str = "http://localhost:5173"
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
-    DATABASE_URL: str = "sqlite:///./data/app.sqlite3"
-
-    JWT_SECRET: str = "change_me"
-    JWT_ALG: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 14
-
-    ADMIN_EMAIL: str = "admin@gastos.local"
-    ADMIN_PASSWORD: str = "admin123"
 
 settings = Settings()

@@ -1,101 +1,13 @@
-import React, { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Pie, PieChart, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { api } from '../../lib/api'
 
-function iso(d: Date) { return d.toISOString().slice(0,10) }
-
 export function Dashboard() {
-  const now = new Date()
-  const first = useMemo(() => new Date(now.getFullYear(), now.getMonth(), 1), [])
-  const last = useMemo(() => new Date(now.getFullYear(), now.getMonth() + 1, 0), [])
-
-  const [from, setFrom] = useState(iso(first))
-  const [to, setTo] = useState(iso(last))
-  const [data, setData] = useState<any | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  const load = async () => {
-    setErr(null)
-    setLoading(true)
-    try {
-      const s = await api.getSummary(from, to)
-      setData(s)
-    } catch(e:any) {
-      setErr(String(e?.message || e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="grid" style={{ gridTemplateColumns: '1fr', gap: 12 }}>
-      <div className="panel">
-        <div className="row" style={{ justifyContent:'space-between' }}>
-          <div>
-            <h2 style={{ margin:0 }}>Dashboard</h2>
-            <div style={{ color:'var(--muted)', fontSize: 13 }}>Consolidado por período (calculado no backend).</div>
-          </div>
-          <div className="row">
-            <div className="field">
-              <label>De</label>
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Até</label>
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-            </div>
-            <button className="btn" onClick={load} disabled={loading}>{loading?'Carregando...':'Atualizar'}</button>
-          </div>
-        </div>
-        {err && <div style={{ marginTop: 12, color:'var(--bad)' }}>{err}</div>}
-      </div>
-
-      {data && (
-        <div className="grid" style={{ gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))' }}>
-          <div className="kpi">
-            <div className="label">Receitas</div>
-            <div className="value" style={{ color:'var(--ok)' }}>R$ {data.income_total.toFixed(2)}</div>
-          </div>
-          <div className="kpi">
-            <div className="label">Despesas</div>
-            <div className="value" style={{ color:'var(--bad)' }}>R$ {data.expense_total.toFixed(2)}</div>
-          </div>
-          <div className="kpi">
-            <div className="label">Saldo líquido</div>
-            <div className="value">R$ {data.net_total.toFixed(2)}</div>
-          </div>
-        </div>
-      )}
-
-      {data && (
-        <div className="panel">
-          <h3 style={{ marginTop:0 }}>Despesas por categoria (simplificado)</h3>
-          <div style={{ color:'var(--muted)', fontSize: 13 }}>
-            O backend retorna por `category_id`. Você pode enriquecer mostrando o nome via /catalog/categories.
-          </div>
-          <div className="table-wrap" style={{ marginTop: 12 }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Categoria</th>
-                  <th>Total de despesas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.by_category.map((x:any, i:number) => (
-                  <tr key={i}>
-                    <td style={{ color:'var(--muted)' }}>{x.category_id || 'Sem categoria'}</td>
-                    <td>R$ {Number(x.expense_total || 0).toFixed(2)}</td>
-                  </tr>
-                ))}
-                {data.by_category.length === 0 && (
-                  <tr><td colSpan={2} style={{ color:'var(--muted)' }}>Sem dados no período.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+  const now = new Date(); const start = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`; const end = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-31`
+  const kpis = useQuery({queryKey:['kpi',start,end], queryFn:()=>api.request(`/dashboard/kpis?startISO=${start}&endISO=${end}`)})
+  const debt = useQuery({queryKey:['debt'], queryFn:()=>api.request('/dashboard/debt')})
+  const tx = useQuery({queryKey:['tx'], queryFn:()=>api.request('/transactions')})
+  const pie = Object.entries((tx.data||[]).reduce((a:any,t:any)=>{ if(t.direction==='Saída') a[t.category||'Outros']=(a[t.category||'Outros']||0)+t.amount; return a},{}) ).map(([name,value])=>({name,value}))
+  const series = (tx.data||[]).map((t:any)=>({date:t.date,saldo:t.direction==='Entrada'?t.amount:-t.amount}))
+  return <div><h2>Dashboard</h2><div className='grid'>{Object.entries(kpis.data||{}).map(([k,v])=><div key={k} className='card'><strong>{k}</strong><div>R$ {Number(v).toFixed(2)}</div></div>)}</div><h3>Dívida por Salário</h3><pre className='card'>{JSON.stringify(debt.data,null,2)}</pre><div className='grid'><div className='card'><PieChart width={320} height={240}><Pie data={pie} dataKey='value' nameKey='name' outerRadius={90} /><Tooltip/></PieChart></div><div className='card'><LineChart width={420} height={240} data={series}><CartesianGrid strokeDasharray='3 3'/><XAxis dataKey='date'/><YAxis/><Tooltip/><Line type='monotone' dataKey='saldo' /></LineChart></div></div></div>
 }

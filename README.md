@@ -1,34 +1,48 @@
-# Gastos v3.0 (Monorepo) — React + FastAPI
+# MyWallet 2.0
 
-Este repositório é um **esqueleto robusto** para seu app financeiro:
-- **Frontend**: React + TypeScript + Vite (UI responsiva, tabelas com scroll horizontal, gráficos simples)
-- **Backend**: FastAPI + SQLModel (API tipada, validações com Pydantic, regras centralizadas)
-- **Banco**: SQLite por padrão (muda fácil para Postgres)
-- **Qualidade**: lint/typecheck/testes (backend), base para testes no frontend
+Monorepo completo para controle financeiro com **React + TypeScript (Vite)** no frontend e **FastAPI + SQLAlchemy + Alembic + Postgres** no backend.
 
-## 1) Requisitos
-- Node.js 18+
-- Python 3.11+ (recomendado)
-- (Opcional) Docker e Docker Compose
+## Funcionalidades
+- Dashboard com KPIs, dívida por salário e gráficos.
+- Lançamentos com métodos Débito/Pix/Dinheiro/Transferência/Crédito.
+- Faturas derivadas por `invoice_key` com status (Vencida, Em aberto, Fechada).
+- Múltiplos cartões e contas.
+- Perfil de salário (mensal/quinzenal).
+- Planejamento de caixa com horizonte configurável.
+- Auth JWT (register/login/refresh/logout).
 
-## 2) Rodar local (sem Docker)
+## Estrutura
+```txt
+/backend
+  app/
+    api/routers/
+    core/
+    db/
+    schemas/
+    services/
+  alembic/
+/frontend
+  src/ui/pages/
+  src/lib/
+```
 
+## Rodar com Docker (recomendado)
+```bash
+docker compose up --build
+```
+- Frontend: http://localhost:5173
+- Backend docs: http://localhost:8000/docs
+
+## Rodar local
 ### Backend
 ```bash
 cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-source .venv/bin/activate
-
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-python -m app.db.init_db
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
-
-A API abre em:
-- Swagger: http://localhost:8000/docs
-- OpenAPI: http://localhost:8000/openapi.json
 
 ### Frontend
 ```bash
@@ -38,47 +52,15 @@ cp .env.example .env
 npm run dev
 ```
 
-O frontend abre em:
-- http://localhost:5173
-
-## 3) Rodar com Docker
-```bash
-docker compose up --build
-```
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8000
-
-## 4) O que já vem pronto
-Backend:
-- Autenticação JWT (login + refresh)
-- CRUD de Transações
-- CRUD de Categorias e Contas
-- Dashboard básico (`/summary`) com agregações por período
-- Importação CSV (`/import/csv`) com relatório de erros por linha
-- Exportação CSV (`/export/csv`)
-
-Frontend:
-- Login
-- Dashboard (consome `/summary`)
-- Transações (listar/criar/editar/deletar)
-- Import/Export CSV
-- Layout responsivo e com **scroll horizontal apenas onde faz sentido** (tabelas)
-
-## 5) CSV (formato canônico)
-Cabeçalho esperado (mínimo):
-```
-date,amount,type,category,account,description,status
-```
-- `date`: YYYY-MM-DD
-- `amount`: número (use ponto ou vírgula, ambos aceitos)
-- `type`: INCOME | EXPENSE
-- `status`: OPEN | PAID (opcional; se vazio assume OPEN)
-
-## 6) Próximos passos recomendados
-- Trocar SQLite por Postgres em produção (variável `DATABASE_URL`)
-- Implementar Planejamento e Faturas de cartão como entidades próprias
-- Adicionar Playwright (e2e) e Vitest (unit) no frontend
-- Conectar Sentry (front e back) para rastrear erros em produção
-
----
-Gerado automaticamente como base para evolução incremental.
+## Endpoints principais
+- `POST /api/auth/register|login|refresh|logout`
+- `GET/PUT /api/me`
+- `GET/POST/PUT/DELETE /api/accounts`
+- `GET/POST/PUT/DELETE /api/cards`
+- `GET/POST/DELETE /api/transactions`
+- `POST /api/transactions/installments`
+- `GET /api/invoices`, `POST /api/invoices/pay`
+- `GET /api/dashboard/kpis`, `GET /api/dashboard/balance`, `GET /api/dashboard/debt`
+- `POST /api/planning/run`
+- `GET /api/salary-profile`, `PUT /api/salary-profile`
+- `GET /api/settings/export-csv`, `POST /api/settings/import-csv`, `POST /api/settings/reset`
