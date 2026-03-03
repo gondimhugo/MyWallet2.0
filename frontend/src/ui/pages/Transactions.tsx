@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 
 interface TransactionForm {
@@ -51,10 +51,15 @@ export function Transactions() {
 
   const tx = useQuery({ queryKey: ['tx'], queryFn: () => api.request('/transactions') })
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api.request('/accounts') })
-  const cards = useQuery({ queryKey: ['cards'], queryFn: () => api.request('/cards') })
 
   const create = useMutation({
-    mutationFn: () => api.request('/transactions', { method: 'POST', body: JSON.stringify(form) }),
+    mutationFn: () => {
+      const payload = {
+        ...form,
+        card: form.method === 'Crédito' && form.direction === 'Saída' ? form.account : '',
+      }
+      return api.request('/transactions', { method: 'POST', body: JSON.stringify(payload) })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tx'] })
       qc.invalidateQueries({ queryKey: ['accounts'] })
@@ -79,8 +84,21 @@ export function Transactions() {
   }, [tx.data, filterType])
 
   // Contas e cartões
-  const accountList = (accounts.data || []) as Array<{ id: string; name: string }>
-  const cardList = (cards.data || []) as Array<{ id: string; name: string }>
+  const accountList = (accounts.data || []) as Array<{ id: string; name: string; card_types?: string[]; credit_limit?: number }>
+  const creditAccountList = accountList.filter((a) => (a.card_types || []).includes('Crédito') && (a.credit_limit || 0) > 0)
+
+  useEffect(() => {
+    const usingCredit = form.method === 'Crédito' && form.direction === 'Saída'
+    if (!usingCredit) return
+
+    if (creditAccountList.length === 0) return
+
+    const exists = creditAccountList.some((a) => a.name === form.account)
+    if (!exists) {
+      setForm((prev) => ({ ...prev, account: creditAccountList[0].name }))
+    }
+  }, [form.method, form.direction, form.account, creditAccountList])
+
 
   return (
     <div>
@@ -215,8 +233,10 @@ export function Transactions() {
 
         {/* Conta */}
         <div style={{ marginTop: '16px' }}>
-          <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>🏦 Conta:</label>
-          {accountList.length > 0 ? (
+          <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+            🏦 Conta {form.method === 'Crédito' && form.direction === 'Saída' ? '(com crédito habilitado)' : ''}:
+          </label>
+          {(form.method === 'Crédito' && form.direction === 'Saída' ? creditAccountList : accountList).length > 0 ? (
             <select
               value={form.account}
               onChange={(e) => setForm({ ...form, account: e.target.value })}
@@ -227,53 +247,27 @@ export function Transactions() {
                 background: 'white',
                 cursor: 'pointer',
                 width: '100%',
-                maxWidth: '400px',
+                maxWidth: '420px',
               }}
             >
-              {accountList.map((acc) => (
+              {(form.method === 'Crédito' && form.direction === 'Saída' ? creditAccountList : accountList).map((acc) => (
                 <option key={acc.id || acc.name} value={acc.name}>
                   {acc.name}
+                  {form.method === 'Crédito' && form.direction === 'Saída' ? ` (limite: R$ ${(acc.credit_limit || 0).toFixed(2)})` : ''}
                 </option>
               ))}
             </select>
           ) : (
-            <div className='muted' style={{ color: '#ef4444' }}>⚠️ Nenhuma conta cadastrada</div>
+            <div className='muted' style={{ color: '#ef4444' }}>
+              ⚠️ {form.method === 'Crédito' && form.direction === 'Saída' ? 'Nenhuma conta com crédito e limite configurados' : 'Nenhuma conta cadastrada'}
+            </div>
+          )}
+          {form.method === 'Crédito' && form.direction === 'Saída' && (
+            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#0284c7', background: '#f0f9ff', padding: '8px 12px', borderRadius: '6px' }}>
+              ℹ️ O cartão é vinculado automaticamente à conta selecionada para a fatura e controle de limite disponível.
+            </div>
           )}
         </div>
-
-        {/* Cartão (se método for crédito) */}
-        {form.method === 'Crédito' && (
-          <div style={{ marginTop: '16px' }}>
-            <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>💳 Cartão de Crédito:</label>
-            {cardList.length > 0 ? (
-              <select
-                value={form.card}
-                onChange={(e) => setForm({ ...form, card: e.target.value })}
-                style={{
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #e5e7eb',
-                  background: 'white',
-                  cursor: 'pointer',
-                  width: '100%',
-                  maxWidth: '400px',
-                }}
-              >
-                <option value=''>Selecione um cartão...</option>
-                {cardList.map((card) => (
-                  <option key={card.id || card.name} value={card.name}>
-                    {card.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className='muted' style={{ color: '#ef4444' }}>⚠️ Nenhum cartão cadastrado</div>
-            )}
-            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#0284c7', background: '#f0f9ff', padding: '8px 12px', borderRadius: '6px' }}>
-              ℹ️ Transações de crédito aparecerão automaticamente em <strong>Faturas</strong>, acumulando até o fechamento do ciclo
-            </div>
-          </div>
-        )}
 
         {/* Descrição */}
         <div style={{ marginTop: '16px' }}>
@@ -321,15 +315,15 @@ export function Transactions() {
         <div style={{ marginTop: '16px' }}>
           <button
             onClick={() => create.mutate()}
-            disabled={create.isPending || !form.description || form.amount <= 0}
+            disabled={create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0)}
             style={{
               background: '#10b981',
               color: 'white',
               padding: '12px 24px',
               fontWeight: 600,
               fontSize: '1rem',
-              cursor: create.isPending || !form.description || form.amount <= 0 ? 'not-allowed' : 'pointer',
-              opacity: create.isPending || !form.description || form.amount <= 0 ? 0.6 : 1,
+              cursor: create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0) ? 'not-allowed' : 'pointer',
+              opacity: create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0) ? 0.6 : 1,
             }}
             className='btn'
           >
