@@ -58,7 +58,7 @@ export function Accounts() {
         account_type: form.accountType,
         card_types: form.cardTypes,
         notes: form.notes,
-        credit_limit: hasCredit ? form.creditLimit : 0,
+        credit_limit: form.creditLimit,
         close_day: hasCredit ? form.closeDay : null,
         due_day: hasCredit ? form.dueDay : null,
         balance: 0,
@@ -224,7 +224,7 @@ export function Accounts() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px', marginTop: '24px' }}>
         {accountList.map((acc) => {
           const bank = BANK_OPTIONS.find((b) => b.code === acc.bank) || BANK_OPTIONS.find((b) => b.name.toLowerCase() === (acc.bank || '').toLowerCase()) || BANK_OPTIONS[BANK_OPTIONS.length - 1]
-          const hasCreditOnCard = (acc.card_types || []).includes('Crédito')
+          const hasCreditOnCard = (acc.card_types || []).includes('Crédito') || (acc.credit_limit || 0) > 0
           return (
             <div key={acc.id || acc.name} style={{ background: 'white', border: `2px solid ${bank.color}`, borderRadius: '12px', padding: '16px' }}>
               <div style={{ fontSize: '2rem' }}>{bank.logo}</div>

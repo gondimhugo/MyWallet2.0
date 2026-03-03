@@ -85,19 +85,18 @@ export function Transactions() {
 
   // Contas e cartões
   const accountList = (accounts.data || []) as Array<{ id: string; name: string; card_types?: string[]; credit_limit?: number }>
-  const creditAccountList = accountList.filter((a) => (a.card_types || []).includes('Crédito') && (a.credit_limit || 0) > 0)
-
+  const creditAccountList = accountList.filter((a) => (a.credit_limit || 0) > 0)
   useEffect(() => {
     const usingCredit = form.method === 'Crédito' && form.direction === 'Saída'
-    if (!usingCredit) return
+    const sourceList = usingCredit ? creditAccountList : accountList
 
-    if (creditAccountList.length === 0) return
+    if (sourceList.length === 0) return
 
-    const exists = creditAccountList.some((a) => a.name === form.account)
+    const exists = sourceList.some((a) => a.name === form.account)
     if (!exists) {
-      setForm((prev) => ({ ...prev, account: creditAccountList[0].name }))
+      setForm((prev) => ({ ...prev, account: sourceList[0].name }))
     }
-  }, [form.method, form.direction, form.account, creditAccountList])
+  }, [form.method, form.direction, form.account, accountList, creditAccountList])
 
 
   return (

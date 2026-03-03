@@ -32,8 +32,8 @@ def serialize_account(row: Account) -> dict:
     }
 
 
-def sync_credit_card(db: Session, user_id, account_name: str, card_types: list[str], close_day: int | None, due_day: int | None):
-    has_credit = "Crédito" in card_types
+def sync_credit_card(db: Session, user_id, account_name: str, credit_enabled: bool, close_day: int | None, due_day: int | None):
+    has_credit = credit_enabled
     card = db.scalar(select(Card).where(and_(Card.user_id == user_id, Card.name == account_name)))
 
     if has_credit and close_day and due_day:
@@ -57,12 +57,18 @@ def create_account(payload: AccountIn, db: Session = Depends(get_db), user: User
     try:
         data = payload.model_dump()
         card_types = data.get("card_types", [])
-        if isinstance(card_types, list):
-            data["card_types"] = ",".join(card_types)
+        if not isinstance(card_types, list):
+            card_types = []
+
+        credit_enabled = ("Crédito" in card_types) or (payload.credit_limit > 0)
+        if credit_enabled and "Crédito" not in card_types:
+            card_types.append("Crédito")
+
+        data["card_types"] = ",".join(card_types)
 
         row = Account(user_id=user.id, **data)
         db.add(row)
-        sync_credit_card(db, user.id, row.name, card_types, payload.close_day, payload.due_day)
+        sync_credit_card(db, user.id, row.name, credit_enabled, payload.close_day, payload.due_day)
 
         db.commit()
         db.refresh(row)
@@ -82,8 +88,14 @@ def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_
         old_name = row.name
         data = payload.model_dump()
         card_types = data.get("card_types", [])
-        if isinstance(card_types, list):
-            data["card_types"] = ",".join(card_types)
+        if not isinstance(card_types, list):
+            card_types = []
+
+        credit_enabled = ("Crédito" in card_types) or (payload.credit_limit > 0)
+        if credit_enabled and "Crédito" not in card_types:
+            card_types.append("Crédito")
+
+        data["card_types"] = ",".join(card_types)
 
         for k, v in data.items():
             setattr(row, k, v)
@@ -93,7 +105,7 @@ def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_
             if old_card:
                 old_card.name = row.name
 
-        sync_credit_card(db, user.id, row.name, card_types, payload.close_day, payload.due_day)
+        sync_credit_card(db, user.id, row.name, credit_enabled, payload.close_day, payload.due_day)
 
         db.commit()
         db.refresh(row)
