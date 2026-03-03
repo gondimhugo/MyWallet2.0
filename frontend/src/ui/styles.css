@@ -1,1 +1,212 @@
-body{font-family:Inter,Arial,sans-serif;margin:0;background:#f4f6fb} .topbar{display:flex;gap:12px;align-items:center;padding:12px;background:#111;color:#fff;position:sticky;top:0}.topbar a{color:#ddd;text-decoration:none}.topbar a.active{color:#fff;font-weight:700}.topbar button{margin-left:auto}.container{padding:16px}.card{background:#fff;padding:12px;border-radius:10px;margin:8px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}input,select,textarea,button{padding:8px;border-radius:8px;border:1px solid #ccc}table{width:100%;border-collapse:collapse;background:#fff}td,th{border:1px solid #eee;padding:6px}
+:root {
+    --bg: #f4f7fb;
+    --card: #ffffff;
+    --muted: #6b7280;
+    --primary: #4f46e5;
+    --glass: rgba(255, 255, 255, 0.6);
+    --radius: 12px;
+    --shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+* {
+    box-sizing: border-box
+}
+
+body {
+    font-family: Inter, Segoe UI, Arial, sans-serif;
+    margin: 0;
+    background: linear-gradient(180deg, var(--bg), #eef3ff);
+    color: #0f172a
+}
+
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column
+}
+
+.topbar {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    padding: 14px 20px;
+    background: linear-gradient(90deg, var(--primary), #06b6d4);
+    color: #fff;
+    position: sticky;
+    top: 0;
+    box-shadow: var(--shadow)
+}
+
+.brand {
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: 0.3px
+}
+
+.nav {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-left: 20px
+}
+
+.nav a {
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-weight: 600
+}
+
+.nav a.active {
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03)
+}
+
+.top-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+    align-items: center
+}
+
+.btn {
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 0;
+    cursor: pointer;
+    font-weight: 600
+}
+
+.btn-primary {
+    background: var(--card);
+    color: var(--primary);
+    box-shadow: var(--shadow)
+}
+
+.btn-ghost {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08)
+}
+
+.container {
+    padding: 24px;
+    max-width: 1200px;
+    margin: 20px auto;
+    width: calc(100% - 48px)
+}
+
+.card {
+    background: var(--card);
+    padding: 16px;
+    border-radius: var(--radius);
+    margin: 12px 0;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(15, 23, 42, 0.03)
+}
+
+.card-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px
+}
+
+.kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 6px
+}
+
+.kpi .value {
+    font-size: 1.25rem;
+    font-weight: 700
+}
+
+.form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px
+}
+
+input,
+select,
+textarea {
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.01));
+    outline: none
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.12);
+    border-color: var(--primary)
+}
+
+button {
+    padding: 10px;
+    border-radius: 10px;
+    border: 0;
+    cursor: pointer
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: transparent
+}
+
+td,
+th {
+    padding: 10px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.04)
+}
+
+.muted {
+    color: var(--muted)
+}
+
+.centered {
+    display: flex;
+    align-items: center;
+    justify-content: center
+}
+
+.login-wrapper {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px
+}
+
+.login-card {
+    width: 100%;
+    max-width: 420px
+}
+
+.logo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--glass);
+    border-radius: 999px;
+    color: var(--card)
+}
+
+.chart-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px
+}

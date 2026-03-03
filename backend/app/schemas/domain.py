@@ -8,6 +8,9 @@ from app.db.models import Direction, Method, SalaryMode, TransactionKind
 
 class AccountIn(BaseModel):
     name: str
+    bank: str = "bradesco"
+    account_type: str = "Corrente"
+    card_types: list[str] = []
     balance: float = 0
 
 

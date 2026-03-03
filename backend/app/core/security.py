@@ -5,7 +5,8 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use PBKDF2-SHA256 to avoid external bcrypt C extension issues in some envs
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 ALGO = "HS256"
 
 
@@ -19,5 +20,10 @@ def verify_password(raw: str, hashed: str) -> bool:
 
 def make_token(sub: str, minutes: int, kind: str) -> str:
     now = datetime.now(timezone.utc)
-    payload = {"sub": sub, "type": kind, "iat": int(now.timestamp()), "exp": int((now + timedelta(minutes=minutes)).timestamp())}
+    payload = {
+        "sub": sub,
+        "type": kind,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=minutes)).timestamp()),
+    }
     return jwt.encode(payload, settings.secret_key, algorithm=ALGO)
