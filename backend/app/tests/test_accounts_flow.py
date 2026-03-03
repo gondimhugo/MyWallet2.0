@@ -32,6 +32,9 @@ def test_register_and_create_account_in_sqlite(tmp_path, monkeypatch):
                 'bank': 'itau',
                 'account_type': 'Corrente',
                 'card_types': ['Crédito'],
+                'credit_limit': 1500,
+                'close_day': 8,
+                'due_day': 15,
                 'balance': 0,
             },
         )
