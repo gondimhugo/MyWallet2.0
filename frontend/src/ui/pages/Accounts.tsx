@@ -53,6 +53,13 @@ export function Accounts() {
         },
     })
 
+    const remove = useMutation({
+        mutationFn: (id: string) => api.request(`/accounts/${id}`, { method: 'DELETE' }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['accounts'] })
+        },
+    })
+
     const accountList = (accounts.data || []) as Array<{ id?: string; name: string; bank?: string; account_type?: string }>
     const selectedBank = BANK_OPTIONS.find((b) => b.code === form.bank)
 
@@ -231,6 +238,21 @@ export function Accounts() {
                             <div style={{ background: '#f3f4f6', padding: '8px 12px', borderRadius: '6px', fontSize: '0.85rem', color: '#4b5563' }}>
                                 📊 {acc.account_type || 'Corrente'}
                             </div>
+                            <button
+                                className='btn'
+                                onClick={() => acc.id && remove.mutate(acc.id)}
+                                disabled={!acc.id || remove.isPending}
+                                style={{
+                                    marginTop: '12px',
+                                    background: '#ef4444',
+                                    color: 'white',
+                                    width: '100%',
+                                    opacity: !acc.id || remove.isPending ? 0.6 : 1,
+                                    cursor: !acc.id || remove.isPending ? 'not-allowed' : 'pointer',
+                                }}
+                            >
+                                {remove.isPending ? '⏳ Removendo...' : '🗑️ Remover conta'}
+                            </button>
                         </div>
                     )
                 })}
