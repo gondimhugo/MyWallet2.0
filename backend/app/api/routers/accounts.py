@@ -1,3 +1,4 @@
+# accounts.py
 from uuid import UUID
 
 import logging
@@ -43,7 +44,9 @@ def serialize_account(row: Account, card: Card | None = None) -> dict:
     }
 
 
-def normalize_credit_fields(payload: AccountIn, card_types: list[str]) -> tuple[bool, int | None, int | None]:
+def normalize_credit_fields(
+    payload: AccountIn, card_types: list[str]
+) -> tuple[bool, int | None, int | None]:
     credit_enabled = ("Crédito" in card_types) or (payload.credit_limit > 0)
     close_day = payload.close_day
     due_day = payload.due_day
@@ -52,22 +55,43 @@ def normalize_credit_fields(payload: AccountIn, card_types: list[str]) -> tuple[
         if "Crédito" not in card_types:
             card_types.append("Crédito")
         if payload.credit_limit <= 0:
-            raise HTTPException(status_code=400, detail="Informe um limite de crédito maior que zero")
+            raise HTTPException(
+                status_code=400, detail="Informe um limite de crédito maior que zero"
+            )
         if not _valid_cycle_day(close_day) or not _valid_cycle_day(due_day):
-            raise HTTPException(status_code=400, detail="Informe os dias de fechamento e vencimento entre 1 e 31")
+            raise HTTPException(
+                status_code=400,
+                detail="Informe os dias de fechamento e vencimento entre 1 e 31",
+            )
 
     return credit_enabled, close_day, due_day
 
 
-def sync_credit_card(db: Session, user_id, account_name: str, credit_enabled: bool, close_day: int | None, due_day: int | None):
-    card = db.scalar(select(Card).where(and_(Card.user_id == user_id, Card.name == account_name)))
+def sync_credit_card(
+    db: Session,
+    user_id,
+    account_name: str,
+    credit_enabled: bool,
+    close_day: int | None,
+    due_day: int | None,
+):
+    card = db.scalar(
+        select(Card).where(and_(Card.user_id == user_id, Card.name == account_name))
+    )
 
     if credit_enabled and close_day and due_day:
         if card:
             card.close_day = close_day
             card.due_day = due_day
         else:
-            db.add(Card(user_id=user_id, name=account_name, close_day=close_day, due_day=due_day))
+            db.add(
+                Card(
+                    user_id=user_id,
+                    name=account_name,
+                    close_day=close_day,
+                    due_day=due_day,
+                )
+            )
     elif card:
         db.delete(card)
 
@@ -81,14 +105,20 @@ def list_accounts(db: Session = Depends(get_db), user: User = Depends(current_us
 
 
 @router.post("")
-def create_account(payload: AccountIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def create_account(
+    payload: AccountIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     try:
         data = payload.model_dump()
         card_types = data.get("card_types", [])
         if not isinstance(card_types, list):
             card_types = []
 
-        credit_enabled, close_day, due_day = normalize_credit_fields(payload, card_types)
+        credit_enabled, close_day, due_day = normalize_credit_fields(
+            payload, card_types
+        )
         data["card_types"] = ",".join(card_types)
 
         row = Account(user_id=user.id, **data)
@@ -106,7 +136,12 @@ def create_account(payload: AccountIn, db: Session = Depends(get_db), user: User
 
 
 @router.put("/{item_id}")
-def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def update_account(
+    item_id: UUID,
+    payload: AccountIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     row = db.get(Account, item_id)
     if not row or row.user_id != user.id:
         raise HTTPException(404, "Conta não encontrada")
@@ -118,14 +153,18 @@ def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_
         if not isinstance(card_types, list):
             card_types = []
 
-        credit_enabled, close_day, due_day = normalize_credit_fields(payload, card_types)
+        credit_enabled, close_day, due_day = normalize_credit_fields(
+            payload, card_types
+        )
         data["card_types"] = ",".join(card_types)
 
         for k, v in data.items():
             setattr(row, k, v)
 
         if old_name != row.name:
-            old_card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == old_name)))
+            old_card = db.scalar(
+                select(Card).where(and_(Card.user_id == user.id, Card.name == old_name))
+            )
             if old_card:
                 old_card.name = row.name
 
@@ -142,10 +181,14 @@ def update_account(item_id: UUID, payload: AccountIn, db: Session = Depends(get_
 
 
 @router.delete("/{item_id}")
-def delete_account(item_id: UUID, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def delete_account(
+    item_id: UUID, db: Session = Depends(get_db), user: User = Depends(current_user)
+):
     row = db.get(Account, item_id)
     if row and row.user_id == user.id:
-        card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == row.name)))
+        card = db.scalar(
+            select(Card).where(and_(Card.user_id == user.id, Card.name == row.name))
+        )
         if card:
             db.delete(card)
         db.delete(row)
