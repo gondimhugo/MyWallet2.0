@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
@@ -26,7 +28,12 @@ def current_user(token=Depends(bearer), db: Session = Depends(get_db)) -> User:
             raise ValueError("invalid")
     except JWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido") from exc
-    user = db.scalar(select(User).where(User.id == payload["sub"]))
+    try:
+        user_id = UUID(payload["sub"])
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido") from exc
+
+    user = db.scalar(select(User).where(User.id == user_id))
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado")
     return user
