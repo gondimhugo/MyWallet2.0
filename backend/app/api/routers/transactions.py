@@ -1,4 +1,4 @@
-# transactions.py
+import logging
 import uuid
 from datetime import date
 from uuid import UUID
@@ -21,6 +21,7 @@ from app.schemas.domain import InstallmentIn, TransactionIn
 from app.services.finance import compute_invoice
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _is_credit(method) -> bool:
@@ -55,61 +56,72 @@ def _is_credit_purchase(tx: Transaction | dict) -> bool:
     )
 
 
-def enrich_credit(db: Session, user: User, tx: dict):
-    if _is_credit_purchase(tx):
-        card_name = tx.get("card") or tx.get("account")
-        if not card_name:
-            raise HTTPException(400, "Conta/cartão de crédito não informado")
+def _resolve_account(db: Session, user: User, account_id: UUID | None = None, account_name: str | None = None) -> Account | None:
+    if account_id:
+        acc = db.get(Account, account_id)
+        if acc and acc.user_id == user.id:
+            return acc
+    if account_name:
+        return db.scalar(select(Account).where(and_(Account.user_id == user.id, Account.name == account_name)))
+    return None
 
-        card = db.scalar(
-            select(Card).where(and_(Card.user_id == user.id, Card.name == card_name))
-        )
+
+def enrich_credit(db: Session, user: User, tx: dict):
+    account_name = tx.get('account')
+    account_id = tx.get('account_id')
+    card_name = tx.get('card')
+    card_account_id = tx.get('card_account_id')
+
+    if account_id and not account_name:
+        account = _resolve_account(db, user, account_id=account_id)
+        if account:
+            tx['account'] = account.name
+            account_name = account.name
+
+    if card_account_id and not card_name:
+        card_account = _resolve_account(db, user, account_id=card_account_id)
+        if card_account:
+            tx['card'] = card_account.name
+            card_name = card_account.name
+
+    if _is_invoice_payment(tx.get('kind')) and _is_out(tx.get('direction')) and not (card_name or card_account_id):
+        raise HTTPException(400, 'Pagamento de fatura exige informar a conta/cartão de crédito (card_account_id ou card)')
+
+    if _is_credit_purchase(tx):
+        credit_account = _resolve_account(db, user, account_id=card_account_id, account_name=card_name or account_name)
+        if not credit_account:
+            raise HTTPException(400, 'Conta/cartão de crédito não encontrado')
+
+        if not credit_account.close_day or not credit_account.due_day:
+            raise HTTPException(400, 'Configure fechamento e vencimento do crédito na conta antes de lançar compra no crédito')
+
+        tx['card_account_id'] = credit_account.id
+        tx['card'] = credit_account.name
+
+        if not tx.get('account'):
+            tx['account'] = credit_account.name
+        if not tx.get('account_id'):
+            tx['account_id'] = credit_account.id
+
+        card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == credit_account.name)))
         if not card:
-            account = db.scalar(
-                select(Account).where(
-                    and_(Account.user_id == user.id, Account.name == card_name)
-                )
-            )
-            if not account or not account.close_day or not account.due_day:
-                raise HTTPException(
-                    400,
-                    "Configure fechamento e vencimento do crédito na conta antes de lançar compra no crédito",
-                )
-            card = Card(
-                user_id=user.id,
-                name=card_name,
-                close_day=account.close_day,
-                due_day=account.due_day,
-            )
+            card = Card(user_id=user.id, name=credit_account.name, close_day=credit_account.close_day, due_day=credit_account.due_day)
             db.add(card)
             db.flush()
 
-        tx["card"] = card_name
-        key, close, due = compute_invoice(card, tx["date"])
-        tx["invoice_key"], tx["invoice_close_iso"], tx["invoice_due_iso"] = (
-            key,
-            close,
-            due,
-        )
+        key, close, due = compute_invoice(card, tx['date'])
+        tx['invoice_key'], tx['invoice_close_iso'], tx['invoice_due_iso'] = key, close, due
+
     return tx
 
 
-def apply_account_balance(
-    db: Session, user: User, tx: Transaction, reverse: bool = False
-):
-    if not tx.account:
-        return
-
-    # Purchases in normal credit should not change cash balance now (only on invoice payment)
+def apply_account_balance(db: Session, user: User, tx: Transaction, reverse: bool = False):
     if _is_credit_purchase(tx):
         return
 
-    account = db.scalar(
-        select(Account).where(
-            and_(Account.user_id == user.id, Account.name == tx.account)
-        )
-    )
+    account = _resolve_account(db, user, account_id=tx.account_id, account_name=tx.account)
     if not account:
+        logger.info('apply_account_balance skipped: account not found tx_id=%s account_id=%s account=%s', tx.id, tx.account_id, tx.account)
         return
 
     delta = tx.amount if _is_in(tx.direction) else -tx.amount
@@ -120,13 +132,9 @@ def apply_account_balance(
 
 
 def apply_credit_usage(db: Session, user: User, tx: Transaction, reverse: bool = False):
-    if not tx.card:
-        return
-
-    account = db.scalar(
-        select(Account).where(and_(Account.user_id == user.id, Account.name == tx.card))
-    )
+    account = _resolve_account(db, user, account_id=tx.card_account_id, account_name=tx.card)
     if not account:
+        logger.info('apply_credit_usage skipped: card account not found tx_id=%s card_account_id=%s card=%s', tx.id, tx.card_account_id, tx.card)
         return
 
     delta = 0.0

@@ -54,7 +54,9 @@ class TransactionIn(BaseModel):
     amount: float
     method: Method
     account: str = ""
+    account_id: UUID | None = None
     card: str = ""
+    card_account_id: UUID | None = None
     kind: TransactionKind = TransactionKind.normal
     category: str = ""
     subcategory: str = ""

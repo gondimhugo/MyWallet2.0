@@ -44,9 +44,7 @@ def serialize_account(row: Account, card: Card | None = None) -> dict:
     }
 
 
-def normalize_credit_fields(
-    payload: AccountIn, card_types: list[str]
-) -> tuple[bool, int | None, int | None]:
+def normalize_credit_fields(payload: AccountIn, card_types: list[str]) -> tuple[bool, int | None, int | None]:
     credit_enabled = ("Crédito" in card_types) or (payload.credit_limit > 0)
     close_day = payload.close_day
     due_day = payload.due_day
@@ -55,29 +53,15 @@ def normalize_credit_fields(
         if "Crédito" not in card_types:
             card_types.append("Crédito")
         if payload.credit_limit <= 0:
-            raise HTTPException(
-                status_code=400, detail="Informe um limite de crédito maior que zero"
-            )
+            raise HTTPException(status_code=400, detail="Informe um limite de crédito maior que zero")
         if not _valid_cycle_day(close_day) or not _valid_cycle_day(due_day):
-            raise HTTPException(
-                status_code=400,
-                detail="Informe os dias de fechamento e vencimento entre 1 e 31",
-            )
+            raise HTTPException(status_code=400, detail="Informe os dias de fechamento e vencimento entre 1 e 31")
 
     return credit_enabled, close_day, due_day
 
 
-def sync_credit_card(
-    db: Session,
-    user_id,
-    account_name: str,
-    credit_enabled: bool,
-    close_day: int | None,
-    due_day: int | None,
-):
-    card = db.scalar(
-        select(Card).where(and_(Card.user_id == user_id, Card.name == account_name))
-    )
+def sync_credit_card(db: Session, user_id, account_name: str, credit_enabled: bool, close_day: int | None, due_day: int | None):
+    card = db.scalar(select(Card).where(and_(Card.user_id == user_id, Card.name == account_name)))
 
     if credit_enabled and close_day and due_day:
         if card:
@@ -116,9 +100,7 @@ def create_account(
         if not isinstance(card_types, list):
             card_types = []
 
-        credit_enabled, close_day, due_day = normalize_credit_fields(
-            payload, card_types
-        )
+        credit_enabled, close_day, due_day = normalize_credit_fields(payload, card_types)
         data["card_types"] = ",".join(card_types)
 
         row = Account(user_id=user.id, **data)
@@ -153,9 +135,7 @@ def update_account(
         if not isinstance(card_types, list):
             card_types = []
 
-        credit_enabled, close_day, due_day = normalize_credit_fields(
-            payload, card_types
-        )
+        credit_enabled, close_day, due_day = normalize_credit_fields(payload, card_types)
         data["card_types"] = ",".join(card_types)
 
         for k, v in data.items():

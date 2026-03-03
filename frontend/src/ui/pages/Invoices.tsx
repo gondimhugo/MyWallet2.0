@@ -19,6 +19,8 @@ export function Invoices() {
     card: string
     amount: number
     account: string
+    account_id?: string
+    card_account_id?: string
   } | null>(null)
 
   const invoices = useQuery({ queryKey: ['invoices'], queryFn: () => api.request('/invoices') })
@@ -105,12 +107,18 @@ export function Invoices() {
 
                   {inv.open > 0 && (
                     <button
-                      onClick={() => setPaymentForm({
-                        invoice_key: inv.invoice_key,
-                        card: inv.card,
-                        amount: inv.open,
-                        account: accountList[0]?.name || 'Conta Corrente',
-                      })}
+                      onClick={() => {
+                        const defaultDebit = accountList[0]
+                        const creditAcc = accountList.find((acc) => acc.name === inv.card)
+                        setPaymentForm({
+                          invoice_key: inv.invoice_key,
+                          card: inv.card,
+                          card_account_id: creditAcc?.id,
+                          amount: inv.open,
+                          account: defaultDebit?.name || 'Conta Corrente',
+                          account_id: defaultDebit?.id,
+                        })
+                      }}
                       style={{ width: '100%', padding: '10px', background: colors.color, color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
                     >
                       {status === 'Vencida' ? '🚨 Pagar Agora' : '💳 Pagar Fatura'}
@@ -139,7 +147,7 @@ export function Invoices() {
 
               <div>
                 <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>🏦 Conta de Débito:</label>
-                <select value={paymentForm.account} onChange={(e) => setPaymentForm({ ...paymentForm, account: e.target.value })} style={{ width: '100%' }}>
+                <select value={paymentForm.account} onChange={(e) => setPaymentForm({ ...paymentForm, account: e.target.value, account_id: accountList.find((a) => a.name === e.target.value)?.id })} style={{ width: '100%' }}>
                   {accountList.map((acc) => (
                     <option key={acc.id} value={acc.name}>{acc.name}</option>
                   ))}
@@ -151,7 +159,7 @@ export function Invoices() {
                   Cancelar
                 </button>
                 <button
-                  onClick={() => payInvoice.mutate({ card: paymentForm.card, invoice_key: paymentForm.invoice_key, amount: paymentForm.amount, account: paymentForm.account, method: 'Pix' })}
+                  onClick={() => payInvoice.mutate({ card: paymentForm.card, card_account_id: paymentForm.card_account_id, invoice_key: paymentForm.invoice_key, amount: paymentForm.amount, account: paymentForm.account, account_id: paymentForm.account_id, method: 'Pix' })}
                   disabled={payInvoice.isPending}
                   style={{ flex: 1, padding: '12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: payInvoice.isPending ? 'not-allowed' : 'pointer', opacity: payInvoice.isPending ? 0.6 : 1 }}
                 >

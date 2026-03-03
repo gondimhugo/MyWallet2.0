@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import api_router
 from app.core.config import settings
 from app.db.models import Base
-from app.db.schema_compat import ensure_accounts_columns
+from app.db.schema_compat import ensure_accounts_columns, ensure_transactions_columns
 from app.db.session import engine
 
 app = FastAPI(title=settings.app_name, version='4.0.0')
@@ -29,3 +29,4 @@ def startup_schema_checks():
     # ensure the base schema exists so writes actually persist instead of failing.
     Base.metadata.create_all(bind=engine)
     ensure_accounts_columns(engine)
+    ensure_transactions_columns(engine)
