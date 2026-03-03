@@ -40,9 +40,20 @@ def _is_credit_purchase(tx: Transaction | dict) -> bool:
 
 def enrich_credit(db: Session, user: User, tx: dict):
     if _is_credit_purchase(tx):
-        card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == tx['card'])))
+        card_name = tx.get('card') or tx.get('account')
+        if not card_name:
+            raise HTTPException(400, 'Conta/cartão de crédito não informado')
+
+        card = db.scalar(select(Card).where(and_(Card.user_id == user.id, Card.name == card_name)))
         if not card:
-            raise HTTPException(400, 'Cartão não encontrado para compra no crédito')
+            account = db.scalar(select(Account).where(and_(Account.user_id == user.id, Account.name == card_name)))
+            if not account or not account.close_day or not account.due_day:
+                raise HTTPException(400, 'Configure fechamento e vencimento do crédito na conta antes de lançar compra no crédito')
+            card = Card(user_id=user.id, name=card_name, close_day=account.close_day, due_day=account.due_day)
+            db.add(card)
+            db.flush()
+
+        tx['card'] = card_name
         key, close, due = compute_invoice(card, tx['date'])
         tx['invoice_key'], tx['invoice_close_iso'], tx['invoice_due_iso'] = key, close, due
     return tx
