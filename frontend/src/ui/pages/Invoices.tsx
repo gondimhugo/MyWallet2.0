@@ -28,6 +28,8 @@ export function Invoices() {
     mutationFn: (payload: any) => api.request('/invoices/pay', { method: 'POST', body: JSON.stringify(payload) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      qc.invalidateQueries({ queryKey: ['tx'] })
       setPaymentForm(null)
     },
   })

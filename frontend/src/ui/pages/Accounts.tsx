@@ -48,7 +48,7 @@ export function Accounts() {
   const selectedBank = useMemo(() => BANK_OPTIONS.find((b) => b.code === form.bank) || BANK_OPTIONS[0], [form.bank])
   const bankName = form.bank === 'otro' ? form.customName.trim() : selectedBank.name
   const hasCredit = form.cardTypes.includes('Crédito')
-  const isValid = !!bankName && (!hasCredit || (form.closeDay >= 1 && form.closeDay <= 31 && form.dueDay >= 1 && form.dueDay <= 31))
+  const isValid = !!bankName && (!hasCredit || (form.creditLimit > 0 && form.closeDay >= 1 && form.closeDay <= 31 && form.dueDay >= 1 && form.dueDay <= 31))
 
   const create = useMutation({
     mutationFn: () => {
