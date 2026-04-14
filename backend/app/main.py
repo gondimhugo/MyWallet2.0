@@ -10,7 +10,8 @@ from app.db.session import engine
 app = FastAPI(title=settings.app_name, version='4.0.0')
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[x.strip() for x in settings.cors_origins.split(',')],
+    allow_origins=[x.strip() for x in settings.cors_origins.split(',') if x.strip()],
+    allow_origin_regex=settings.cors_origin_regex or None,
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],

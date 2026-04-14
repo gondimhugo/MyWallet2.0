@@ -10,18 +10,14 @@ services:
     # Aplica as migrações antes de subir o uvicorn.
     dockerCommand: bash -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     envVars:
+      # Use a URL INTERNA do seu Postgres no Render
+      # (ex: postgresql://admin:senha@dpg-xxxxxxxxxxxxxxxxxxxx-a/mywallet_os4m)
       - key: DATABASE_URL
-        fromDatabase:
-          name: mywallet-db
-          property: connectionString
+        sync: false
+      # Chave de assinatura JWT — gerada automaticamente pelo Render
       - key: SECRET_KEY
         generateValue: true
+      # Opcional: lista separada por vírgula de origens explícitas
+      # (o backend já aceita *.vercel.app via CORS_ORIGIN_REGEX por padrão)
       - key: CORS_ORIGINS
-        sync: false  # defina no painel: URL do frontend (ex: https://mywallet-frontend.onrender.com)
-
-databases:
-  - name: mywallet-db
-    plan: free
-    region: oregon
-    databaseName: mywallet_os4m
-    user: admin
+        sync: false
