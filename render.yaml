@@ -7,8 +7,10 @@ services:
     plan: free
     region: oregon
     healthCheckPath: /health
-    # Aplica as migrações antes de subir o uvicorn.
-    dockerCommand: bash -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # O start script aplica `alembic upgrade head` e em seguida sobe o uvicorn.
+    # Mantemos a lógica em backend/start.sh para evitar problemas de quoting
+    # do dockerCommand (que tratava o `&&` como parte do nome do comando).
+    dockerCommand: /app/start.sh
     envVars:
       # Use a URL INTERNA do seu Postgres no Render
       # (ex: postgresql://admin:senha@dpg-xxxxxxxxxxxxxxxxxxxx-a/mywallet_os4m)
