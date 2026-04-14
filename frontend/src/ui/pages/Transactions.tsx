@@ -35,7 +35,7 @@ const initial: TransactionForm = {
   direction: 'Saída',
   amount: 0,
   method: 'Pix',
-  account: 'Conta Corrente',
+  account: '',
   card: '',
   kind: 'Normal',
   category: '',
@@ -55,12 +55,15 @@ export function Transactions() {
   const create = useMutation({
     mutationFn: () => {
       const selectedAccount = accountList.find((a) => a.name === form.account)
+      if (!selectedAccount) {
+        throw new Error('Selecione uma conta bancária válida antes de salvar o lançamento.')
+      }
       const isCreditOut = form.method === 'Crédito' && form.direction === 'Saída'
       const payload = {
         ...form,
-        account_id: selectedAccount?.id || null,
-        card: isCreditOut ? form.account : '',
-        card_account_id: isCreditOut ? (selectedAccount?.id || null) : null,
+        account_id: selectedAccount.id,
+        card: isCreditOut ? selectedAccount.name : '',
+        card_account_id: isCreditOut ? selectedAccount.id : null,
       }
       return api.request('/transactions', { method: 'POST', body: JSON.stringify(payload) })
     },
@@ -316,22 +319,42 @@ export function Transactions() {
 
         {/* Botão salvar */}
         <div style={{ marginTop: '16px' }}>
-          <button
-            onClick={() => create.mutate()}
-            disabled={create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0)}
-            style={{
-              background: '#10b981',
-              color: 'white',
-              padding: '12px 24px',
-              fontWeight: 600,
-              fontSize: '1rem',
-              cursor: create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0) ? 'not-allowed' : 'pointer',
-              opacity: create.isPending || !form.description || form.amount <= 0 || (form.method === 'Crédito' && form.direction === 'Saída' && creditAccountList.length === 0) ? 0.6 : 1,
-            }}
-            className='btn'
-          >
-            {create.isPending ? '⏳ Salvando...' : '✅ Salvar Lançamento'}
-          </button>
+          {(() => {
+            const selectedAccount = accountList.find((a) => a.name === form.account)
+            const isCreditOut = form.method === 'Crédito' && form.direction === 'Saída'
+            const noCreditAccount = isCreditOut && creditAccountList.length === 0
+            const disabled =
+              create.isPending ||
+              !form.description ||
+              form.amount <= 0 ||
+              !selectedAccount ||
+              noCreditAccount
+            return (
+              <>
+                <button
+                  onClick={() => create.mutate()}
+                  disabled={disabled}
+                  style={{
+                    background: '#10b981',
+                    color: 'white',
+                    padding: '12px 24px',
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.6 : 1,
+                  }}
+                  className='btn'
+                >
+                  {create.isPending ? '⏳ Salvando...' : '✅ Salvar Lançamento'}
+                </button>
+                {create.isError && (
+                  <div style={{ marginTop: '8px', color: '#dc2626', fontSize: '0.9rem' }}>
+                    ⚠️ {(create.error as Error)?.message || 'Erro ao salvar lançamento'}
+                  </div>
+                )}
+              </>
+            )
+          })()}
         </div>
       </div>
 

@@ -138,7 +138,11 @@ def update_account(
         credit_enabled, close_day, due_day = normalize_credit_fields(payload, card_types)
         data["card_types"] = ",".join(card_types)
 
+        # balance and credit_used are managed by transaction operations;
+        # never overwrite them from the client payload.
         for k, v in data.items():
+            if k in ("balance", "credit_used"):
+                continue
             setattr(row, k, v)
 
         if old_name != row.name:
