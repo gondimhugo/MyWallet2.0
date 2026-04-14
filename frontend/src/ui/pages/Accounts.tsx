@@ -39,6 +39,10 @@ const initialForm: AccountForm = {
   dueDay: 15,
 }
 
+function formatBRL(value: number) {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 export function Accounts() {
   const [form, setForm] = useState<AccountForm>(initialForm)
   const qc = useQueryClient()
@@ -91,6 +95,25 @@ export function Accounts() {
     due_day?: number | null
   }>
 
+  const totals = useMemo(() => {
+    let cash = 0
+    let limit = 0
+    let used = 0
+    let available = 0
+    for (const acc of accountList) {
+      const cardTypes = acc.card_types || []
+      const isOnlyCredit = cardTypes.length > 0 && cardTypes.every((t) => t === 'Crédito')
+      if (!isOnlyCredit) cash += acc.balance || 0
+      const lim = acc.credit_limit || 0
+      if (lim > 0) {
+        limit += lim
+        used += acc.credit_used || 0
+        available += acc.credit_available ?? (lim - (acc.credit_used || 0))
+      }
+    }
+    return { cash, limit, used, available }
+  }, [accountList])
+
   const toggleCardType = (type: string) => {
     setForm((prev) => ({
       ...prev,
@@ -102,8 +125,39 @@ export function Accounts() {
     <div>
       <div className='card card-title'>
         <h2>🏦 Contas Bancárias</h2>
-        <div className='muted'>Cadastro profissional de contas com observações, débito e crédito</div>
+        <div className='muted'>Cadastro de contas com saldos de caixa (débito, Pix, transferência) e crédito</div>
       </div>
+
+      {accountList.length > 0 && (
+        <div className='card'>
+          <div className='card-title'>
+            <strong>💼 Resumo Consolidado</strong>
+            <div className='muted' style={{ fontSize: '0.85rem' }}>{accountList.length} conta(s)</div>
+          </div>
+          <div className='balance-summary'>
+            <div className='balance-tile cash'>
+              <div className='label'>💰 Saldo em Caixa</div>
+              <div className='value'>{formatBRL(totals.cash)}</div>
+              <div className='hint'>Débito · Pix · Transferência · Dinheiro</div>
+            </div>
+            <div className='balance-tile credit-available'>
+              <div className='label'>✅ Crédito Disponível</div>
+              <div className='value'>{formatBRL(totals.available)}</div>
+              <div className='hint'>Pronto para usar</div>
+            </div>
+            <div className='balance-tile credit-used'>
+              <div className='label'>💳 Crédito Usado</div>
+              <div className='value'>{formatBRL(totals.used)}</div>
+              <div className='hint'>Já comprometido</div>
+            </div>
+            <div className='balance-tile credit-limit'>
+              <div className='label'>🎯 Limite Total</div>
+              <div className='value'>{formatBRL(totals.limit)}</div>
+              <div className='hint'>Soma de todos limites</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className='card'>
         <div className='card-title'>
@@ -113,7 +167,7 @@ export function Accounts() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
           <label style={{ fontWeight: 600 }}>🏦 Selecione o Banco:</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
             {BANK_OPTIONS.map((bank) => (
               <button
                 key={bank.code}
@@ -184,7 +238,7 @@ export function Accounts() {
         {hasCredit && (
           <div className='card' style={{ marginBottom: '16px', background: '#f8fafc' }}>
             <div className='card-title'><strong>💳 Configuração do Crédito</strong></div>
-            <div className='grid' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+            <div className='grid' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
               <div>
                 <label style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>Limite</label>
                 <input type='number' step='0.01' value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: Number(e.target.value) })} />
@@ -221,28 +275,68 @@ export function Accounts() {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px', marginTop: '24px' }}>
+      <div className='accounts-grid'>
         {accountList.map((acc) => {
           const bank = BANK_OPTIONS.find((b) => b.code === acc.bank) || BANK_OPTIONS.find((b) => b.name.toLowerCase() === (acc.bank || '').toLowerCase()) || BANK_OPTIONS[BANK_OPTIONS.length - 1]
-          const hasCreditOnCard = (acc.card_types || []).includes('Crédito') || (acc.credit_limit || 0) > 0
+          const cardTypes = acc.card_types || []
+          const hasCreditOnCard = cardTypes.includes('Crédito') || (acc.credit_limit || 0) > 0
+          const isOnlyCredit = cardTypes.length > 0 && cardTypes.every((t) => t === 'Crédito')
+          const hasDebit = !isOnlyCredit
+          const balance = acc.balance || 0
+          const limit = acc.credit_limit || 0
+          const used = acc.credit_used || 0
+          const available = acc.credit_available ?? (limit - used)
           return (
-            <div key={acc.id || acc.name} style={{ background: 'white', border: `2px solid ${bank.color}`, borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '2rem' }}>{bank.logo}</div>
-              <div style={{ fontWeight: 700, marginTop: '6px' }}>{acc.name}</div>
-              <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>{bank.name} · {acc.account_type || 'Corrente'}</div>
-              <div style={{ marginTop: '8px', fontWeight: 600, color: '#0f766e' }}>Saldo: R$ {(acc.balance || 0).toFixed(2)}</div>
-              {hasCreditOnCard && (
-                <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#4f46e5' }}>
-                  Limite: R$ {(acc.credit_limit || 0).toFixed(2)} · Usado: R$ {(acc.credit_used || 0).toFixed(2)} · Disponível: R$ {(acc.credit_available ?? ((acc.credit_limit || 0) - (acc.credit_used || 0))).toFixed(2)} · Fecha: {acc.close_day || '-'} · Vence: {acc.due_day || '-'}
+            <div key={acc.id || acc.name} className='account-card' style={{ borderTop: `4px solid ${bank.color}` }}>
+              <div className='account-head'>
+                <div className='logo'>{bank.logo}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className='name'>{acc.name}</div>
+                  <div className='sub'>{bank.name} · {acc.account_type || 'Corrente'}</div>
+                </div>
+              </div>
+
+              {hasDebit && (
+                <div className='highlight-box cash-box'>
+                  <div className='hb-label'>💰 Saldo em Caixa</div>
+                  <div className='hb-value'>{formatBRL(balance)}</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.75 }}>Débito · Pix · Transferência</div>
                 </div>
               )}
-              {acc.notes && <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#475569' }}>🗒️ {acc.notes}</div>}
+
+              {hasCreditOnCard && (
+                <div className='highlight-box credit-box'>
+                  <div className='hb-label'>💳 Crédito</div>
+                  <div className='hb-value'>{formatBRL(available)}</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.75 }}>Disponível de {formatBRL(limit)}</div>
+                  <div className='credit-mini-grid'>
+                    <div className='credit-mini available'>
+                      <div className='cm-label'>Disponível</div>
+                      <div className='cm-value'>{formatBRL(available)}</div>
+                    </div>
+                    <div className='credit-mini used'>
+                      <div className='cm-label'>Usado</div>
+                      <div className='cm-value'>{formatBRL(used)}</div>
+                    </div>
+                    <div className='credit-mini limit'>
+                      <div className='cm-label'>Limite</div>
+                      <div className='cm-value'>{formatBRL(limit)}</div>
+                    </div>
+                  </div>
+                  <div className='credit-dates'>
+                    <span>📅 Fecha dia <strong>{acc.close_day || '-'}</strong></span>
+                    <span>⏰ Vence dia <strong>{acc.due_day || '-'}</strong></span>
+                  </div>
+                </div>
+              )}
+
+              {acc.notes && <div style={{ fontSize: '0.85rem', color: '#475569' }}>🗒️ {acc.notes}</div>}
 
               <button
                 className='btn'
                 onClick={() => acc.id && remove.mutate(acc.id)}
                 disabled={!acc.id || remove.isPending}
-                style={{ marginTop: '12px', background: '#ef4444', color: 'white', width: '100%', opacity: !acc.id || remove.isPending ? 0.6 : 1 }}
+                style={{ marginTop: 'auto', background: '#ef4444', color: 'white', width: '100%', opacity: !acc.id || remove.isPending ? 0.6 : 1 }}
               >
                 {remove.isPending ? '⏳ Removendo...' : '🗑️ Remover conta'}
               </button>
