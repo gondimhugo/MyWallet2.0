@@ -14,8 +14,15 @@ export function Login({ onLogin }: { onLogin: (pair: { access_token: string; ref
       const res = await api.request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
       if (!res || !res.access_token) throw new Error('Resposta inválida do servidor')
       onLogin(res)
-    } catch (err) {
-      // se login falhar, tenta registrar automaticamente (fluxo demo)
+    } catch (err: any) {
+      const message: string = err?.message || String(err) || ''
+      // Erros de rede não devem disparar o fallback de registro: a segunda
+      // chamada falharia pela mesma razão e mascararia o motivo real.
+      if (message.startsWith('Não foi possível conectar')) {
+        setError(message)
+        return
+      }
+      // se login falhar por credenciais, tenta registrar automaticamente (fluxo demo)
       try {
         const reg = await api.request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, full_name: 'Demo' }) })
         if (!reg || !reg.access_token) throw new Error('Registro falhou')
