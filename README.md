@@ -52,6 +52,26 @@ cp .env.example .env
 npm run dev
 ```
 
+## Deploy (Render + Vercel)
+
+### 1. Backend no Render
+1. No painel Render → **New** → **Blueprint** → conecte este repositório.
+   O `render.yaml` na raiz cria o serviço `mywallet-backend`.
+2. Em **Environment**, defina:
+   - `DATABASE_URL` = URL **interna** do seu Postgres no Render
+     (ex: `postgresql://admin:SENHA@dpg-xxxxxxxxxxxxxxxxxxxx-a/mywallet_os4m`).
+     O backend converte automaticamente para o driver `psycopg`.
+   - `CORS_ORIGINS` (opcional) = URL exata do frontend (ex: `https://mywallet.vercel.app`).
+     `*.vercel.app` e `*.onrender.com` já são aceitos via regex padrão.
+3. Após o deploy, valide: `https://<seu-backend>.onrender.com/health`.
+
+### 2. Frontend no Vercel
+1. **New Project** → importe o repositório.
+2. **Root Directory:** mantenha em `/` (raiz). O `vercel.json` cuida do build.
+3. **Environment Variables:**
+   - `VITE_API_URL` = `https://<seu-backend>.onrender.com/api`
+4. Faça o deploy. SPA routing já está configurado via rewrites.
+
 ## Endpoints principais
 - `POST /api/auth/register|login|refresh|logout`
 - `GET/PUT /api/me`

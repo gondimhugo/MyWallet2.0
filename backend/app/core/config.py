@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     refresh_token_expire_minutes: int = 60 * 24 * 7
     # Allow common local dev ports for the frontend (Vite may pick 5173 or 5174)
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    # Regex that also matches Vercel preview/production URLs by default. Set
+    # CORS_ORIGIN_REGEX to override (e.g. to add a custom domain).
+    cors_origin_regex: str = (
+        r"https://([a-z0-9-]+\.)*vercel\.app|"
+        r"https://([a-z0-9-]+\.)*onrender\.com"
+    )
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
