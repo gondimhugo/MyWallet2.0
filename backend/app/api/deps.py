@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import User
-from app.db.session import SessionLocal
 
 bearer = HTTPBearer()
 
 
 def get_db():
+    from app.db.session import SessionLocal
     db = SessionLocal()
     try:
         yield db

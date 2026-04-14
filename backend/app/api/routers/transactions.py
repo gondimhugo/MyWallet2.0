@@ -121,7 +121,10 @@ def apply_account_balance(db: Session, user: User, tx: Transaction, reverse: boo
 
     account = _resolve_account(db, user, account_id=tx.account_id, account_name=tx.account)
     if not account:
-        logger.info('apply_account_balance skipped: account not found tx_id=%s account_id=%s account=%s', tx.id, tx.account_id, tx.account)
+        logger.warning(
+            'apply_account_balance skipped: account not found tx_id=%s account_id=%s account=%s',
+            tx.id, tx.account_id, tx.account,
+        )
         return
 
     delta = tx.amount if _is_in(tx.direction) else -tx.amount
@@ -134,7 +137,12 @@ def apply_account_balance(db: Session, user: User, tx: Transaction, reverse: boo
 def apply_credit_usage(db: Session, user: User, tx: Transaction, reverse: bool = False):
     account = _resolve_account(db, user, account_id=tx.card_account_id, account_name=tx.card)
     if not account:
-        logger.info('apply_credit_usage skipped: card account not found tx_id=%s card_account_id=%s card=%s', tx.id, tx.card_account_id, tx.card)
+        # Only worth warning about when the transaction actually implies credit movement.
+        if _is_credit_purchase(tx) or (_is_invoice_payment(tx.kind) and _is_out(tx.direction)):
+            logger.warning(
+                'apply_credit_usage skipped: card account not found tx_id=%s card_account_id=%s card=%s',
+                tx.id, tx.card_account_id, tx.card,
+            )
         return
 
     delta = 0.0
