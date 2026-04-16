@@ -96,6 +96,8 @@ export function Transactions() {
   const [mode, setMode] = useState<EntryMode>('compra-avista')
   const [form, setForm] = useState<TransactionForm>(initial)
   const [filterMode, setFilterMode] = useState<'all' | EntryMode>('all')
+  const [installmentEnabled, setInstallmentEnabled] = useState(false)
+  const [installmentCount, setInstallmentCount] = useState(2)
   const qc = useQueryClient()
 
   const tx = useQuery({ queryKey: ['tx'], queryFn: () => api.request('/transactions') })
@@ -148,6 +150,10 @@ export function Transactions() {
       }
       return next
     })
+    if (mode !== 'compra-credito') {
+      setInstallmentEnabled(false)
+      setInstallmentCount(2)
+    }
   }, [mode])
 
   // Ajusta conta conforme modo / método
@@ -168,11 +174,18 @@ export function Transactions() {
         throw new Error('Selecione uma conta bancária válida antes de salvar o lançamento.')
       }
       const isCreditOut = mode === 'compra-credito'
+      const isInstallment = isCreditOut && installmentEnabled && installmentCount >= 2
       const payload = {
         ...form,
         account_id: selectedAccount.id,
         card: isCreditOut ? selectedAccount.name : '',
         card_account_id: isCreditOut ? selectedAccount.id : null,
+      }
+      if (isInstallment) {
+        return api.request('/transactions/installments', {
+          method: 'POST',
+          body: JSON.stringify({ ...payload, installment_count: installmentCount }),
+        })
       }
       return api.request('/transactions', { method: 'POST', body: JSON.stringify(payload) })
     },
@@ -187,6 +200,8 @@ export function Transactions() {
         kind: prev.kind,
         account: prev.account,
       }))
+      setInstallmentEnabled(false)
+      setInstallmentCount(2)
     },
   })
 
@@ -364,20 +379,114 @@ export function Transactions() {
           </div>
         )}
 
-        {/* Modo crédito: informação reforçada */}
+        {/* Modo crédito: informação reforçada + parcelamento */}
         {mode === 'compra-credito' && (
-          <div
-            style={{
-              marginTop: '16px',
-              background: '#eef2ff',
-              color: '#3730a3',
-              padding: '10px 14px',
-              borderRadius: '8px',
-              fontSize: '0.9rem',
-            }}
-          >
-            💳 Forma de pagamento: <strong>Crédito</strong> — a compra entrará na próxima fatura do cartão selecionado.
-          </div>
+          <>
+            <div
+              style={{
+                marginTop: '16px',
+                background: '#eef2ff',
+                color: '#3730a3',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+              }}
+            >
+              💳 Forma de pagamento: <strong>Crédito</strong> — a compra entrará na próxima fatura do cartão selecionado.
+            </div>
+
+            <div style={{ marginTop: '16px' }}>
+              <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>🧩 Parcelamento</label>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setInstallmentEnabled(false)}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: !installmentEnabled ? '2px solid #4f46e5' : '1px solid #e5e7eb',
+                    background: !installmentEnabled ? '#eef2ff' : 'white',
+                    color: !installmentEnabled ? '#4f46e5' : '#6b7280',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  💳 À vista (1x)
+                </button>
+                <button
+                  onClick={() => setInstallmentEnabled(true)}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: installmentEnabled ? '2px solid #4f46e5' : '1px solid #e5e7eb',
+                    background: installmentEnabled ? '#eef2ff' : 'white',
+                    color: installmentEnabled ? '#4f46e5' : '#6b7280',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  🧩 Parcelado
+                </button>
+              </div>
+
+              {installmentEnabled && (
+                <div
+                  style={{
+                    marginTop: '12px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label style={{ fontWeight: 600 }}>Nº de parcelas:</label>
+                    <input
+                      type='number'
+                      min={2}
+                      max={48}
+                      value={installmentCount}
+                      onChange={(e) => {
+                        const v = Number(e.target.value)
+                        if (Number.isFinite(v)) setInstallmentCount(Math.max(2, Math.min(48, Math.round(v))))
+                      }}
+                      style={{ width: '100px', padding: '8px', borderRadius: '6px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {[2, 3, 6, 10, 12].map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => setInstallmentCount(n)}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            border: installmentCount === n ? '2px solid #4f46e5' : '1px solid #e5e7eb',
+                            background: installmentCount === n ? '#eef2ff' : 'white',
+                            color: installmentCount === n ? '#4f46e5' : '#6b7280',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          {n}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {form.amount > 0 && installmentCount >= 2 && (
+                    <div style={{ fontSize: '0.9rem', color: '#334155' }}>
+                      💰 Total <strong>R$ {form.amount.toFixed(2)}</strong> em{' '}
+                      <strong>{installmentCount}x</strong> de{' '}
+                      <strong>R$ {(form.amount / installmentCount).toFixed(2)}</strong>
+                      <span style={{ color: '#64748b' }}> · cada parcela cairá em uma fatura mensal consecutiva.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* Conta / Cartão */}
@@ -469,7 +578,11 @@ export function Transactions() {
               opacity: !canSubmit || create.isPending ? 0.7 : 1,
             }}
           >
-            {create.isPending ? '⏳ Salvando...' : `✅ Salvar ${currentMeta.label}`}
+            {create.isPending
+              ? '⏳ Salvando...'
+              : mode === 'compra-credito' && installmentEnabled && installmentCount >= 2
+                ? `✅ Salvar ${installmentCount}x parcelas`
+                : `✅ Salvar ${currentMeta.label}`}
           </button>
           {create.isError && (
             <div style={{ marginTop: '8px', color: '#dc2626', fontSize: '0.9rem' }}>
@@ -572,7 +685,24 @@ export function Transactions() {
                         {meta.icon} {meta.label}
                       </span>
                     </td>
-                    <td style={{ padding: '12px', color: '#0f172a', fontWeight: 500 }}>{t.description}</td>
+                    <td style={{ padding: '12px', color: '#0f172a', fontWeight: 500 }}>
+                      {t.description}
+                      {t.installment_count && t.installment_count >= 2 && (
+                        <span
+                          style={{
+                            marginLeft: '8px',
+                            background: '#eef2ff',
+                            color: '#4f46e5',
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          🧩 {t.installment_index}/{t.installment_count}
+                        </span>
+                      )}
+                    </td>
                     <td
                       style={{
                         padding: '12px',
