@@ -22,6 +22,12 @@ export function Invoices() {
     account_id?: string
     card_account_id?: string
   } | null>(null)
+  const [editForm, setEditForm] = useState<{
+    invoice_key: string
+    card: string
+    target_month: string
+    original_month: string
+  } | null>(null)
 
   const invoices = useQuery({ queryKey: ['invoices'], queryFn: () => api.request('/invoices') })
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api.request('/accounts') })
@@ -33,6 +39,16 @@ export function Invoices() {
       qc.invalidateQueries({ queryKey: ['accounts'] })
       qc.invalidateQueries({ queryKey: ['tx'] })
       setPaymentForm(null)
+    },
+  })
+
+  const reassignInvoice = useMutation({
+    mutationFn: (payload: { invoice_key: string; target_month: string }) =>
+      api.request('/invoices/reassign', { method: 'POST', body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['tx'] })
+      setEditForm(null)
     },
   })
 
@@ -105,31 +121,130 @@ export function Invoices() {
                     Cartão: <strong>{inv.card}</strong> · Compras: R$ {inv.purchases.toFixed(2)} · Pagos: R$ {inv.payments.toFixed(2)}
                   </div>
 
-                  {inv.open > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {inv.open > 0 && (
+                      <button
+                        onClick={() => {
+                          const defaultDebit = accountList[0]
+                          const creditAcc = accountList.find((acc) => acc.name === inv.card)
+                          setPaymentForm({
+                            invoice_key: inv.invoice_key,
+                            card: inv.card,
+                            card_account_id: creditAcc?.id,
+                            amount: inv.open,
+                            account: defaultDebit?.name || 'Conta Corrente',
+                            account_id: defaultDebit?.id,
+                          })
+                        }}
+                        style={{ flex: '1 1 60%', padding: '10px', background: colors.color, color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {status === 'Vencida' ? '🚨 Pagar Agora' : '💳 Pagar Fatura'}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
-                        const defaultDebit = accountList[0]
-                        const creditAcc = accountList.find((acc) => acc.name === inv.card)
-                        setPaymentForm({
+                        const currentMonth = (inv.invoice_due_iso || '').slice(0, 7)
+                        setEditForm({
                           invoice_key: inv.invoice_key,
                           card: inv.card,
-                          card_account_id: creditAcc?.id,
-                          amount: inv.open,
-                          account: defaultDebit?.name || 'Conta Corrente',
-                          account_id: defaultDebit?.id,
+                          original_month: currentMonth,
+                          target_month: currentMonth,
                         })
                       }}
-                      style={{ width: '100%', padding: '10px', background: colors.color, color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
+                      style={{ flex: '1 1 30%', padding: '10px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
                     >
-                      {status === 'Vencida' ? '🚨 Pagar Agora' : '💳 Pagar Fatura'}
+                      ✏️ Editar mês
                     </button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
           )
         })}
       </div>
+
+      {editForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setEditForm(null)}>
+          <div className='card' style={{ maxWidth: '420px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <div className='card-title' style={{ marginBottom: '16px' }}>
+              <strong>✏️ Editar Mês da Fatura</strong>
+              <div className='muted'>{editForm.invoice_key}</div>
+            </div>
+
+            <div style={{ background: '#fffbeb', borderLeft: '4px solid #d97706', padding: '10px 12px', borderRadius: '6px', fontSize: '0.85rem', color: '#92400e', marginBottom: '16px' }}>
+              Esta ação move todas as compras e pagamentos desta fatura para o mês de vencimento escolhido. Use quando uma fatura foi gerada no mês errado.
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>🗓️ Novo mês de vencimento:</label>
+                <input
+                  type='month'
+                  value={editForm.target_month}
+                  onChange={(e) => setEditForm({ ...editForm, target_month: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+                {editForm.original_month && (
+                  <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '6px' }}>
+                    Mês atual: <strong>{editForm.original_month}</strong>
+                  </div>
+                )}
+              </div>
+
+              {reassignInvoice.isError && (
+                <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', padding: '10px 12px', borderRadius: '6px', fontSize: '0.85rem', color: '#991b1b' }}>
+                  {(reassignInvoice.error as Error)?.message || 'Erro ao atualizar a fatura'}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => setEditForm(null)}
+                  style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() =>
+                    reassignInvoice.mutate({
+                      invoice_key: editForm.invoice_key,
+                      target_month: editForm.target_month,
+                    })
+                  }
+                  disabled={
+                    reassignInvoice.isPending ||
+                    !editForm.target_month ||
+                    editForm.target_month === editForm.original_month
+                  }
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: '#4f46e5',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    cursor:
+                      reassignInvoice.isPending ||
+                      !editForm.target_month ||
+                      editForm.target_month === editForm.original_month
+                        ? 'not-allowed'
+                        : 'pointer',
+                    opacity:
+                      reassignInvoice.isPending ||
+                      !editForm.target_month ||
+                      editForm.target_month === editForm.original_month
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+                  {reassignInvoice.isPending ? '⏳ Atualizando...' : '💾 Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {paymentForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setPaymentForm(null)}>
