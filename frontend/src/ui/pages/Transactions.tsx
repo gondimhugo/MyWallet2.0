@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 
+type EntryMode = 'compra-avista' | 'compra-credito' | 'entrada' | 'pagamento-fatura' | 'salario'
+
 interface TransactionForm {
   date: string
   direction: 'Entrada' | 'Saída'
@@ -16,18 +18,18 @@ interface TransactionForm {
   notes: string
 }
 
-const TRANSACTION_KINDS = {
-  Normal: 'Transação Normal',
-  PagamentoFatura: 'Pagamento de Fatura',
-  Salario: 'Salário',
+const CASH_METHODS: Record<string, string> = {
+  Pix: '🔵 Pix',
+  Débito: '💳 Débito',
+  Dinheiro: '💵 Dinheiro',
+  Transferência: '🏦 Transferência',
 }
 
-const PAYMENT_METHODS = {
+const ENTRY_METHODS: Record<string, string> = {
   Pix: '🔵 Pix',
-  Transferência: '🏦 Transferência Bancária',
-  Débito: '💳 Débito',
-  Crédito: '💳 Crédito',
+  Transferência: '🏦 Transferência',
   Dinheiro: '💵 Dinheiro',
+  Débito: '💳 Débito',
 }
 
 const initial: TransactionForm = {
@@ -44,13 +46,120 @@ const initial: TransactionForm = {
   notes: '',
 }
 
+const MODE_META: Record<EntryMode, { label: string; icon: string; color: string; bg: string; helper: string }> = {
+  'compra-avista': {
+    label: 'Compra à vista',
+    icon: '🛒',
+    color: '#0f766e',
+    bg: '#ecfdf5',
+    helper: 'Pagamento imediato com Pix, Débito, Dinheiro ou Transferência. Debita na hora do saldo da conta.',
+  },
+  'compra-credito': {
+    label: 'Compra no Crédito',
+    icon: '💳',
+    color: '#4f46e5',
+    bg: '#eef2ff',
+    helper: 'Compra parcelada/no cartão. Será lançada automaticamente em uma fatura e consome o limite do cartão.',
+  },
+  entrada: {
+    label: 'Entrada (recebi)',
+    icon: '⬇️',
+    color: '#059669',
+    bg: '#f0fdf4',
+    helper: 'Qualquer valor que entrou na conta (reembolso, transferência recebida, venda, etc.). Para salário use a aba dedicada.',
+  },
+  'pagamento-fatura': {
+    label: 'Pagamento de Fatura',
+    icon: '🧾',
+    color: '#b45309',
+    bg: '#fffbeb',
+    helper: 'Registre manualmente o pagamento de uma fatura de cartão. Em geral prefira a página de Faturas.',
+  },
+  salario: {
+    label: 'Salário',
+    icon: '💰',
+    color: '#047857',
+    bg: '#ecfdf5',
+    helper: 'Salários recorrentes devem ser cadastrados na página de Salário para serem lançados automaticamente.',
+  },
+}
+
+function categorizeTransaction(t: any): EntryMode {
+  if (t.kind === 'Salario') return 'salario'
+  if (t.kind === 'PagamentoFatura') return 'pagamento-fatura'
+  if (t.direction === 'Entrada') return 'entrada'
+  if (t.method === 'Crédito') return 'compra-credito'
+  return 'compra-avista'
+}
+
 export function Transactions() {
+  const [mode, setMode] = useState<EntryMode>('compra-avista')
   const [form, setForm] = useState<TransactionForm>(initial)
-  const [filterType, setFilterType] = useState<'all' | 'entrada' | 'saida'>('all')
+  const [filterMode, setFilterMode] = useState<'all' | EntryMode>('all')
   const qc = useQueryClient()
 
   const tx = useQuery({ queryKey: ['tx'], queryFn: () => api.request('/transactions') })
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api.request('/accounts') })
+
+  const accountList = (accounts.data || []) as Array<{
+    id: string
+    name: string
+    card_types?: string[]
+    credit_limit?: number
+    close_day?: number | null
+    due_day?: number | null
+  }>
+  const creditAccountList = accountList.filter(
+    (a) => (a.credit_limit || 0) > 0 || (a.card_types || []).includes('Crédito') || (!!a.close_day && !!a.due_day),
+  )
+
+  // Ajusta o form quando muda o modo
+  useEffect(() => {
+    setForm((prev) => {
+      const next = { ...prev }
+      switch (mode) {
+        case 'compra-avista':
+          next.direction = 'Saída'
+          next.kind = 'Normal'
+          if (next.method === 'Crédito' || !Object.keys(CASH_METHODS).includes(next.method)) {
+            next.method = 'Pix'
+          }
+          break
+        case 'compra-credito':
+          next.direction = 'Saída'
+          next.kind = 'Normal'
+          next.method = 'Crédito'
+          break
+        case 'entrada':
+          next.direction = 'Entrada'
+          next.kind = 'Normal'
+          if (next.method === 'Crédito') next.method = 'Pix'
+          break
+        case 'pagamento-fatura':
+          next.direction = 'Saída'
+          next.kind = 'PagamentoFatura'
+          if (next.method === 'Crédito') next.method = 'Pix'
+          break
+        case 'salario':
+          next.direction = 'Entrada'
+          next.kind = 'Salario'
+          if (next.method === 'Crédito') next.method = 'Pix'
+          break
+      }
+      return next
+    })
+  }, [mode])
+
+  // Ajusta conta conforme modo / método
+  useEffect(() => {
+    const usingCredit = mode === 'compra-credito'
+    const sourceList = usingCredit ? creditAccountList : accountList
+    if (sourceList.length === 0) return
+    const exists = sourceList.some((a) => a.name === form.account)
+    if (!exists) {
+      setForm((prev) => ({ ...prev, account: sourceList[0].name }))
+    }
+  }, [mode, form.account, accountList, creditAccountList])
 
   const create = useMutation({
     mutationFn: () => {
@@ -58,7 +167,7 @@ export function Transactions() {
       if (!selectedAccount) {
         throw new Error('Selecione uma conta bancária válida antes de salvar o lançamento.')
       }
-      const isCreditOut = form.method === 'Crédito' && form.direction === 'Saída'
+      const isCreditOut = mode === 'compra-credito'
       const payload = {
         ...form,
         account_id: selectedAccount.id,
@@ -70,7 +179,14 @@ export function Transactions() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tx'] })
       qc.invalidateQueries({ queryKey: ['accounts'] })
-      setForm({ ...initial, date: new Date().toISOString().slice(0, 10) })
+      setForm((prev) => ({
+        ...initial,
+        date: new Date().toISOString().slice(0, 10),
+        direction: prev.direction,
+        method: prev.method,
+        kind: prev.kind,
+        account: prev.account,
+      }))
     },
   })
 
@@ -82,86 +198,133 @@ export function Transactions() {
     },
   })
 
-  // Filtrar transações
+  const allTransactions = (tx.data || []) as any[]
+
+  // Contagens por modo (para os filtros e o resumo)
+  const counts = useMemo(() => {
+    const c = { 'compra-avista': 0, 'compra-credito': 0, entrada: 0, 'pagamento-fatura': 0, salario: 0 } as Record<EntryMode, number>
+    for (const t of allTransactions) c[categorizeTransaction(t)]++
+    return c
+  }, [allTransactions])
+
   const filteredTransactions = useMemo(() => {
-    const list = (tx.data || []) as any[]
-    if (filterType === 'all') return list
-    if (filterType === 'entrada') return list.filter((t) => t.direction === 'Entrada')
-    return list.filter((t) => t.direction === 'Saída')
-  }, [tx.data, filterType])
+    if (filterMode === 'all') return allTransactions
+    return allTransactions.filter((t) => categorizeTransaction(t) === filterMode)
+  }, [allTransactions, filterMode])
 
-  // Contas e cartões
-  const accountList = (accounts.data || []) as Array<{ id: string; name: string; card_types?: string[]; credit_limit?: number; close_day?: number | null; due_day?: number | null }>
-  const creditAccountList = accountList.filter((a) => (a.credit_limit || 0) > 0 || (a.card_types || []).includes('Crédito') || (!!a.close_day && !!a.due_day))
-  useEffect(() => {
-    const usingCredit = form.method === 'Crédito' && form.direction === 'Saída'
-    const sourceList = usingCredit ? creditAccountList : accountList
+  const totalFiltered = useMemo(() => {
+    return filteredTransactions.reduce((sum, t) => sum + (t.direction === 'Entrada' ? t.amount : -t.amount), 0)
+  }, [filteredTransactions])
 
-    if (sourceList.length === 0) return
+  const currentMeta = MODE_META[mode]
+  const sourceAccounts = mode === 'compra-credito' ? creditAccountList : accountList
 
-    const exists = sourceList.some((a) => a.name === form.account)
-    if (!exists) {
-      setForm((prev) => ({ ...prev, account: sourceList[0].name }))
-    }
-  }, [form.method, form.direction, form.account, accountList, creditAccountList])
-
+  const canSubmit =
+    !!form.description &&
+    form.amount > 0 &&
+    !!sourceAccounts.find((a) => a.name === form.account) &&
+    !(mode === 'compra-credito' && creditAccountList.length === 0)
 
   return (
     <div>
       <div className='card card-title'>
         <h2>Lançamentos</h2>
-        <div className='muted'>Gerenciar entradas, saídas e dívidas</div>
+        <div className='muted'>Compras, entradas e pagamentos</div>
       </div>
 
-      {/* Aviso sobre fluxo de pagamentos */}
-      <div className='card' style={{ background: '#f0f9ff', borderLeft: '4px solid #0284c7' }}>
-        <strong>💡 Como funciona:</strong>
-        <ul style={{ marginTop: '8px', marginBottom: '0', paddingLeft: '20px', color: '#0c4a6e', fontSize: '0.95rem' }}>
-          <li><strong>🛒 Compras em Crédito:</strong> Adicione aqui na Saída (método Crédito) → aparecerá em Faturas automaticamente</li>
-          <li><strong>💳 Pagamento de Faturas:</strong> Gerenciado na página de <strong>Faturas</strong></li>
-          <li><strong>💰 Salário:</strong> Configurado na página de <strong>Salário</strong> → adicionado automaticamente no dia</li>
-        </ul>
-      </div>
-
-      {/* Formulário de entrada */}
+      {/* Seletor de tipo de lançamento */}
       <div className='card'>
-        <div className='card-title'>
+        <div className='card-title' style={{ marginBottom: '8px' }}>
           <strong>➕ Novo Lançamento</strong>
-          <div className='muted'>preencha os dados da transação</div>
+          <div className='muted'>escolha o tipo</div>
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+            gap: '10px',
+            marginTop: '4px',
+          }}
+        >
+          {(Object.keys(MODE_META) as EntryMode[]).map((m) => {
+            const meta = MODE_META[m]
+            const active = mode === m
+            return (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                style={{
+                  padding: '14px 12px',
+                  borderRadius: '10px',
+                  border: active ? `2px solid ${meta.color}` : '1px solid #e5e7eb',
+                  background: active ? meta.bg : 'white',
+                  color: active ? meta.color : '#475569',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  lineHeight: 1.25,
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>{meta.icon}</span>
+                <span style={{ fontSize: '0.95rem' }}>{meta.label}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div
+          style={{
+            marginTop: '14px',
+            fontSize: '0.9rem',
+            color: currentMeta.color,
+            background: currentMeta.bg,
+            padding: '10px 14px',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${currentMeta.color}`,
+          }}
+        >
+          <strong>
+            {currentMeta.icon} {currentMeta.label}:
+          </strong>{' '}
+          {currentMeta.helper}
+        </div>
+      </div>
+
+      {/* Formulário específico do modo selecionado */}
+      <div className='card' style={{ borderTop: `4px solid ${currentMeta.color}` }}>
+        <div className='card-title' style={{ marginBottom: '12px' }}>
+          <strong style={{ color: currentMeta.color }}>
+            {currentMeta.icon} Dados — {currentMeta.label}
+          </strong>
         </div>
 
-        {/* Data e Tipo */}
-        <div className='grid' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontWeight: 600 }}>📅 Data:</label>
-            <input
-              type='date'
-              value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-            />
+        {mode === 'salario' && (
+          <div
+            style={{
+              background: '#fff7ed',
+              border: '1px solid #fed7aa',
+              color: '#9a3412',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: '12px',
+              fontSize: '0.9rem',
+            }}
+          >
+            ⚠️ Salários são melhor cadastrados na página de <strong>Salário</strong> para lançamento automático. Use esta opção só
+            para lançar um salário manualmente.
           </div>
+        )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontWeight: 600 }}>📊 Direção:</label>
-            <select
-              value={form.direction}
-              onChange={(e) => setForm({ ...form, direction: e.target.value as 'Entrada' | 'Saída' })}
-              style={{
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #e5e7eb',
-                background: form.direction === 'Entrada' ? '#f0fdf4' : '#fef2f2',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              <option value='Entrada'>⬇️ Entrada (recebi)</option>
-              <option value='Saída'>⬆️ Saída (paguei)</option>
-            </select>
+        {/* Data e Valor */}
+        <div className='grid' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontWeight: 600 }}>📅 Data</label>
+            <input type='date' value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontWeight: 600 }}>💰 Valor:</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontWeight: 600 }}>💰 Valor</label>
             <input
               type='number'
               step='0.01'
@@ -172,128 +335,108 @@ export function Transactions() {
           </div>
         </div>
 
-        {/* Tipo de Transação */}
-        <div style={{ marginTop: '16px' }}>
-          <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>🏷️ Tipo de Transação:</label>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {Object.entries(TRANSACTION_KINDS).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setForm({ ...form, kind: key })}
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '6px',
-                  border: form.kind === key ? '2px solid #4f46e5' : '1px solid #e5e7eb',
-                  background: form.kind === key ? '#e0e7ff' : 'white',
-                  color: form.kind === key ? '#4f46e5' : '#6b7280',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                }}
-              >
-                {label}
-              </button>
-            ))}
+        {/* Método de pagamento — apenas para modos à vista / entrada / pagamento fatura */}
+        {(mode === 'compra-avista' || mode === 'entrada' || mode === 'pagamento-fatura' || mode === 'salario') && (
+          <div style={{ marginTop: '16px' }}>
+            <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+              🔄 {mode === 'entrada' || mode === 'salario' ? 'Como você recebeu' : 'Forma de pagamento'}
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+              {Object.entries(mode === 'entrada' || mode === 'salario' ? ENTRY_METHODS : CASH_METHODS).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setForm({ ...form, method: key })}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: form.method === key ? `2px solid ${currentMeta.color}` : '1px solid #e5e7eb',
+                    background: form.method === key ? currentMeta.bg : 'white',
+                    color: form.method === key ? currentMeta.color : '#6b7280',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    textAlign: 'left',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          {form.kind === 'Normal' && (
-            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#0c4a6e', background: '#f0f9ff', padding: '8px 12px', borderRadius: '6px' }}>
-              🛒 Compras normais em débito, dinheiro ou crédito. Crédito aparecerá em Faturas
-            </div>
-          )}
-          {form.kind === 'PagamentoFatura' && (
-            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#7c2d12', background: '#fef3c7', padding: '8px 12px', borderRadius: '6px' }}>
-              💳 Use para registrar pagamento manual de fatura
-            </div>
-          )}
-          {form.kind === 'Salario' && (
-            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#065f46', background: '#ecfdf5', padding: '8px 12px', borderRadius: '6px' }}>
-              💰 Entrada de salário
-            </div>
-          )}
-        </div>
+        )}
 
-        {/* Método de Pagamento */}
-        <div style={{ marginTop: '16px' }}>
-          <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>🔄 Método de Pagamento:</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
-            {Object.entries(PAYMENT_METHODS).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setForm({ ...form, method: key })}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  border: form.method === key ? '2px solid #4f46e5' : '1px solid #e5e7eb',
-                  background: form.method === key ? '#e0e7ff' : 'white',
-                  color: form.method === key ? '#4f46e5' : '#6b7280',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  textAlign: 'left',
-                }}
-              >
-                {label}
-              </button>
-            ))}
+        {/* Modo crédito: informação reforçada */}
+        {mode === 'compra-credito' && (
+          <div
+            style={{
+              marginTop: '16px',
+              background: '#eef2ff',
+              color: '#3730a3',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+            }}
+          >
+            💳 Forma de pagamento: <strong>Crédito</strong> — a compra entrará na próxima fatura do cartão selecionado.
           </div>
-        </div>
+        )}
 
-        {/* Conta */}
+        {/* Conta / Cartão */}
         <div style={{ marginTop: '16px' }}>
           <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>
-            🏦 Conta {form.method === 'Crédito' && form.direction === 'Saída' ? '(com crédito habilitado)' : ''}:
+            {mode === 'compra-credito' ? '💳 Cartão de Crédito' : '🏦 Conta bancária'}
           </label>
-          {(form.method === 'Crédito' && form.direction === 'Saída' ? creditAccountList : accountList).length > 0 ? (
+          {sourceAccounts.length > 0 ? (
             <select
               value={form.account}
               onChange={(e) => setForm({ ...form, account: e.target.value })}
-              style={{
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #e5e7eb',
-                background: 'white',
-                cursor: 'pointer',
-                width: '100%',
-                maxWidth: '420px',
-              }}
+              style={{ padding: '10px', borderRadius: '8px', width: '100%', maxWidth: '420px' }}
             >
-              {(form.method === 'Crédito' && form.direction === 'Saída' ? creditAccountList : accountList).map((acc) => (
+              {sourceAccounts.map((acc) => (
                 <option key={acc.id || acc.name} value={acc.name}>
                   {acc.name}
-                  {form.method === 'Crédito' && form.direction === 'Saída' ? ` (limite: R$ ${(acc.credit_limit || 0).toFixed(2)})` : ''}
+                  {mode === 'compra-credito' ? ` — limite R$ ${(acc.credit_limit || 0).toFixed(2)}` : ''}
                 </option>
               ))}
             </select>
           ) : (
-            <div className='muted' style={{ color: '#ef4444' }}>
-              ⚠️ {form.method === 'Crédito' && form.direction === 'Saída' ? 'Nenhuma conta com crédito configurado' : 'Nenhuma conta cadastrada'}
-            </div>
-          )}
-          {form.method === 'Crédito' && form.direction === 'Saída' && (
-            <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#0284c7', background: '#f0f9ff', padding: '8px 12px', borderRadius: '6px' }}>
-              ℹ️ O cartão é vinculado automaticamente à conta selecionada para a fatura e controle de limite disponível.
+            <div style={{ color: '#dc2626', fontSize: '0.9rem' }}>
+              ⚠️{' '}
+              {mode === 'compra-credito'
+                ? 'Nenhum cartão com crédito configurado. Cadastre em Contas.'
+                : 'Nenhuma conta cadastrada. Cadastre em Contas.'}
             </div>
           )}
         </div>
 
-        {/* Descrição */}
+        {/* Descrição e Categoria */}
         <div style={{ marginTop: '16px' }}>
-          <div className='grid' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontWeight: 600 }}>📝 Descrição:</label>
+          <div className='grid' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontWeight: 600 }}>📝 Descrição</label>
               <input
                 type='text'
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder='Ex: Supermercado, Salário, etc.'
+                placeholder={
+                  mode === 'compra-credito'
+                    ? 'Ex: Mercado, Netflix, Roupa...'
+                    : mode === 'entrada'
+                      ? 'Ex: Reembolso, Venda, Transferência recebida...'
+                      : mode === 'pagamento-fatura'
+                        ? 'Ex: Fatura Nubank Abril'
+                        : mode === 'salario'
+                          ? 'Ex: Salário Empresa X'
+                          : 'Ex: Supermercado, Farmácia, Uber...'
+                }
               />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontWeight: 600 }}>📂 Categoria:</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontWeight: 600 }}>📂 Categoria</label>
               <input
                 type='text'
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                placeholder='Ex: Alimentação, Salário, Dívida'
+                placeholder='Ex: Alimentação, Lazer, Salário...'
               />
             </div>
           </div>
@@ -301,139 +444,169 @@ export function Transactions() {
 
         {/* Notas */}
         <div style={{ marginTop: '16px' }}>
-          <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>📌 Notas (opcional):</label>
+          <label style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>📌 Notas (opcional)</label>
           <textarea
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
             placeholder='Notas adicionais...'
-            style={{
-              padding: '10px',
-              borderRadius: '8px',
-              border: '1px solid #e5e7eb',
-              minHeight: '80px',
-              fontFamily: 'monospace',
-              width: '100%',
-            }}
+            style={{ padding: '10px', borderRadius: '8px', minHeight: '70px', width: '100%' }}
           />
         </div>
 
-        {/* Botão salvar */}
-        <div style={{ marginTop: '16px' }}>
-          {(() => {
-            const selectedAccount = accountList.find((a) => a.name === form.account)
-            const isCreditOut = form.method === 'Crédito' && form.direction === 'Saída'
-            const noCreditAccount = isCreditOut && creditAccountList.length === 0
-            const disabled =
-              create.isPending ||
-              !form.description ||
-              form.amount <= 0 ||
-              !selectedAccount ||
-              noCreditAccount
-            return (
-              <>
-                <button
-                  onClick={() => create.mutate()}
-                  disabled={disabled}
-                  style={{
-                    background: '#10b981',
-                    color: 'white',
-                    padding: '12px 24px',
-                    fontWeight: 600,
-                    fontSize: '1rem',
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    opacity: disabled ? 0.6 : 1,
-                  }}
-                  className='btn'
-                >
-                  {create.isPending ? '⏳ Salvando...' : '✅ Salvar Lançamento'}
-                </button>
-                {create.isError && (
-                  <div style={{ marginTop: '8px', color: '#dc2626', fontSize: '0.9rem' }}>
-                    ⚠️ {(create.error as Error)?.message || 'Erro ao salvar lançamento'}
-                  </div>
-                )}
-              </>
-            )
-          })()}
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className='card' style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ fontWeight: 600 }}>Filtrar:</label>
-        {(['all', 'entrada', 'saida'] as const).map((type) => (
+        {/* Ação */}
+        <div style={{ marginTop: '18px' }}>
           <button
-            key={type}
-            onClick={() => setFilterType(type)}
+            onClick={() => create.mutate()}
+            disabled={!canSubmit || create.isPending}
+            className='btn'
             style={{
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: filterType === type ? '2px solid #4f46e5' : '1px solid #e5e7eb',
-              background: filterType === type ? '#e0e7ff' : 'white',
-              color: filterType === type ? '#4f46e5' : '#6b7280',
-              cursor: 'pointer',
+              background: canSubmit ? currentMeta.color : '#9ca3af',
+              color: 'white',
+              padding: '12px 24px',
               fontWeight: 600,
+              fontSize: '1rem',
+              cursor: !canSubmit || create.isPending ? 'not-allowed' : 'pointer',
+              opacity: !canSubmit || create.isPending ? 0.7 : 1,
             }}
           >
-            {type === 'all' ? '📊 Todos' : type === 'entrada' ? '⬇️ Entradas' : '⬆️ Saídas'}
+            {create.isPending ? '⏳ Salvando...' : `✅ Salvar ${currentMeta.label}`}
           </button>
-        ))}
-        <div style={{ marginLeft: 'auto', color: '#6b7280', fontSize: '0.9rem' }}>
-          Total: {filteredTransactions.length} lançamento{filteredTransactions.length !== 1 ? 's' : ''}
+          {create.isError && (
+            <div style={{ marginTop: '8px', color: '#dc2626', fontSize: '0.9rem' }}>
+              ⚠️ {(create.error as Error)?.message || 'Erro ao salvar lançamento'}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tabela de transações */}
+      {/* Lista / Histórico */}
+      <div className='card card-title'>
+        <h3 style={{ margin: 0 }}>📋 Histórico de Lançamentos</h3>
+        <div className='muted'>
+          {filteredTransactions.length} registro{filteredTransactions.length !== 1 ? 's' : ''} · saldo{' '}
+          <strong style={{ color: totalFiltered >= 0 ? '#10b981' : '#ef4444' }}>
+            {totalFiltered >= 0 ? '+' : '-'} R$ {Math.abs(totalFiltered).toFixed(2)}
+          </strong>
+        </div>
+      </div>
+
+      <div className='card' style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {([
+          { key: 'all', label: '📊 Todos', color: '#4f46e5', count: allTransactions.length },
+          { key: 'compra-avista', label: '🛒 À vista', color: MODE_META['compra-avista'].color, count: counts['compra-avista'] },
+          { key: 'compra-credito', label: '💳 Crédito', color: MODE_META['compra-credito'].color, count: counts['compra-credito'] },
+          { key: 'entrada', label: '⬇️ Entradas', color: MODE_META['entrada'].color, count: counts['entrada'] },
+          { key: 'pagamento-fatura', label: '🧾 Pgto. Fatura', color: MODE_META['pagamento-fatura'].color, count: counts['pagamento-fatura'] },
+          { key: 'salario', label: '💰 Salário', color: MODE_META['salario'].color, count: counts['salario'] },
+        ] as const).map((f) => {
+          const active = filterMode === f.key
+          return (
+            <button
+              key={f.key}
+              onClick={() => setFilterMode(f.key as typeof filterMode)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: active ? `2px solid ${f.color}` : '1px solid #e5e7eb',
+                background: active ? `${f.color}15` : 'white',
+                color: active ? f.color : '#475569',
+                cursor: 'pointer',
+                fontWeight: 600,
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'center',
+              }}
+            >
+              <span>{f.label}</span>
+              <span
+                style={{
+                  background: active ? f.color : '#e5e7eb',
+                  color: active ? 'white' : '#475569',
+                  padding: '1px 8px',
+                  borderRadius: '999px',
+                  fontSize: '0.75rem',
+                }}
+              >
+                {f.count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Tabela */}
       <div className='card' style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f3f4f6' }}>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>📅 Data</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>📝 Descrição</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>🏷️ Tipo</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>📝 Descrição</th>
               <th style={{ padding: '12px', textAlign: 'right', fontWeight: 600 }}>💰 Valor</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>🔄 Método</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>📂 Categoria</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>💳 Fatura</th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>🗑️ Ações</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>🗑️</th>
             </tr>
           </thead>
           <tbody>
             {filteredTransactions.length > 0 ? (
-              filteredTransactions.map((t: any) => (
-                <tr key={t.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '12px' }}>{t.date}</td>
-                  <td style={{ padding: '12px', color: '#0f172a', fontWeight: 500 }}>{t.description}</td>
-                  <td style={{ padding: '12px', fontSize: '0.85rem' }}>
-                    <span style={{ background: '#e0e7ff', color: '#4f46e5', padding: '3px 8px', borderRadius: '4px' }}>
-                      {t.kind}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600, color: t.direction === 'Entrada' ? '#10b981' : '#ef4444' }}>
-                    {t.direction === 'Entrada' ? '+' : '-'} R$ {t.amount.toFixed(2)}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '0.9rem' }}>{t.method}</td>
-                  <td style={{ padding: '12px', color: '#6b7280' }}>{t.category || '—'}</td>
-                  <td style={{ padding: '12px', fontSize: '0.85rem', color: '#6b7280' }}>{t.invoice_key || '—'}</td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    <button
-                      className='btn'
-                      onClick={() => t.id && remove.mutate(t.id)}
-                      disabled={!t.id || remove.isPending}
+              filteredTransactions.map((t: any) => {
+                const cat = categorizeTransaction(t)
+                const meta = MODE_META[cat]
+                return (
+                  <tr key={t.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '12px' }}>{t.date}</td>
+                    <td style={{ padding: '12px' }}>
+                      <span
+                        style={{
+                          background: meta.bg,
+                          color: meta.color,
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {meta.icon} {meta.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', color: '#0f172a', fontWeight: 500 }}>{t.description}</td>
+                    <td
                       style={{
-                        background: '#ef4444',
-                        color: 'white',
-                        padding: '6px 10px',
-                        fontSize: '0.85rem',
-                        opacity: !t.id || remove.isPending ? 0.6 : 1,
-                        cursor: !t.id || remove.isPending ? 'not-allowed' : 'pointer',
+                        padding: '12px',
+                        textAlign: 'right',
+                        fontWeight: 700,
+                        color: t.direction === 'Entrada' ? '#10b981' : '#ef4444',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      {remove.isPending ? 'Removendo...' : 'Remover'}
-                    </button>
-                  </td>
-                </tr>
-              ))
+                      {t.direction === 'Entrada' ? '+' : '-'} R$ {t.amount.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '0.9rem' }}>{t.method}</td>
+                    <td style={{ padding: '12px', color: '#6b7280' }}>{t.category || '—'}</td>
+                    <td style={{ padding: '12px', fontSize: '0.85rem', color: '#6b7280' }}>{t.invoice_key || '—'}</td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <button
+                        className='btn'
+                        onClick={() => t.id && remove.mutate(t.id)}
+                        disabled={!t.id || remove.isPending}
+                        style={{
+                          background: '#ef4444',
+                          color: 'white',
+                          padding: '6px 10px',
+                          fontSize: '0.85rem',
+                          opacity: !t.id || remove.isPending ? 0.6 : 1,
+                          cursor: !t.id || remove.isPending ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {remove.isPending ? '...' : 'Remover'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })
             ) : (
               <tr>
                 <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>
