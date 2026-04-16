@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 
 interface AccountForm {
@@ -45,6 +45,8 @@ function formatBRL(value: number) {
 
 export function Accounts() {
   const [form, setForm] = useState<AccountForm>(initialForm)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const formRef = useRef<HTMLDivElement | null>(null)
   const qc = useQueryClient()
 
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => api.request('/accounts') })
@@ -53,32 +55,85 @@ export function Accounts() {
   const bankName = form.bank === 'otro' ? form.customName.trim() : selectedBank.name
   const hasCredit = form.cardTypes.includes('Crédito')
   const isValid = !!bankName && (!hasCredit || (form.creditLimit > 0 && form.closeDay >= 1 && form.closeDay <= 31 && form.dueDay >= 1 && form.dueDay <= 31))
+  const isEditing = editingId !== null
+
+  const buildPayload = () => ({
+    name: bankName,
+    bank: form.bank,
+    account_type: form.accountType,
+    card_types: form.cardTypes,
+    notes: form.notes,
+    credit_limit: form.creditLimit,
+    close_day: hasCredit ? form.closeDay : null,
+    due_day: hasCredit ? form.dueDay : null,
+    balance: 0,
+  })
+
+  const resetForm = () => {
+    setForm(initialForm)
+    setEditingId(null)
+  }
 
   const create = useMutation({
-    mutationFn: () => {
-      const payload = {
-        name: bankName,
-        bank: form.bank,
-        account_type: form.accountType,
-        card_types: form.cardTypes,
-        notes: form.notes,
-        credit_limit: form.creditLimit,
-        close_day: hasCredit ? form.closeDay : null,
-        due_day: hasCredit ? form.dueDay : null,
-        balance: 0,
-      }
-      return api.request('/accounts', { method: 'POST', body: JSON.stringify(payload) })
-    },
+    mutationFn: () => api.request('/accounts', { method: 'POST', body: JSON.stringify(buildPayload()) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['accounts'] })
-      setForm(initialForm)
+      resetForm()
+    },
+  })
+
+  const update = useMutation({
+    mutationFn: (id: string) => api.request(`/accounts/${id}`, { method: 'PUT', body: JSON.stringify(buildPayload()) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      resetForm()
     },
   })
 
   const remove = useMutation({
     mutationFn: (id: string) => api.request(`/accounts/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      if (editingId === id) resetForm()
+    },
   })
+
+  const startEdit = (acc: {
+    id?: string
+    name: string
+    bank?: string
+    account_type?: string
+    card_types?: string[]
+    notes?: string
+    credit_limit?: number
+    close_day?: number | null
+    due_day?: number | null
+  }) => {
+    if (!acc.id) return
+    const knownBank = BANK_OPTIONS.find(
+      (b) => b.code === acc.bank || b.name.toLowerCase() === (acc.bank || '').toLowerCase(),
+    )
+    const bankCode = knownBank && knownBank.code !== 'otro' ? knownBank.code : 'otro'
+    const customName = bankCode === 'otro' ? acc.name : ''
+    const allowedAccountTypes: AccountForm['accountType'][] = ['Corrente', 'Poupança', 'Investimento', 'Outra']
+    const accountType = allowedAccountTypes.includes(acc.account_type as AccountForm['accountType'])
+      ? (acc.account_type as AccountForm['accountType'])
+      : 'Corrente'
+    setForm({
+      customName,
+      bank: bankCode,
+      accountType,
+      cardTypes: acc.card_types ? [...acc.card_types] : [],
+      notes: acc.notes || '',
+      creditLimit: acc.credit_limit || 0,
+      closeDay: acc.close_day ?? 8,
+      dueDay: acc.due_day ?? 15,
+    })
+    setEditingId(acc.id)
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
 
   const accountList = (accounts.data || []) as Array<{
     id?: string
@@ -159,10 +214,10 @@ export function Accounts() {
         </div>
       )}
 
-      <div className='card'>
+      <div className='card' ref={formRef}>
         <div className='card-title'>
-          <strong>➕ Nova Conta Bancária</strong>
-          <div className='muted'>Selecione o banco e configure a conta</div>
+          <strong>{isEditing ? '✏️ Editar Conta Bancária' : '➕ Nova Conta Bancária'}</strong>
+          <div className='muted'>{isEditing ? 'Atualize os dados da conta e salve as alterações' : 'Selecione o banco e configure a conta'}</div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
@@ -265,14 +320,42 @@ export function Accounts() {
           />
         </div>
 
-        <button
-          onClick={() => create.mutate()}
-          disabled={create.isPending || !isValid}
-          className='btn'
-          style={{ background: '#10b981', color: 'white', opacity: create.isPending || !isValid ? 0.6 : 1 }}
-        >
-          {create.isPending ? '⏳ Salvando...' : '✅ Salvar Conta'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => {
+              if (isEditing && editingId) {
+                update.mutate(editingId)
+              } else {
+                create.mutate()
+              }
+            }}
+            disabled={create.isPending || update.isPending || !isValid}
+            className='btn'
+            style={{
+              background: isEditing ? '#4f46e5' : '#10b981',
+              color: 'white',
+              opacity: create.isPending || update.isPending || !isValid ? 0.6 : 1,
+            }}
+          >
+            {isEditing
+              ? update.isPending
+                ? '⏳ Salvando...'
+                : '💾 Salvar Alterações'
+              : create.isPending
+                ? '⏳ Salvando...'
+                : '✅ Salvar Conta'}
+          </button>
+          {isEditing && (
+            <button
+              onClick={resetForm}
+              disabled={update.isPending}
+              className='btn'
+              style={{ background: '#6b7280', color: 'white', opacity: update.isPending ? 0.6 : 1 }}
+            >
+              ✖️ Cancelar
+            </button>
+          )}
+        </div>
       </div>
 
       <div className='accounts-grid'>
@@ -332,14 +415,24 @@ export function Accounts() {
 
               {acc.notes && <div style={{ fontSize: '0.85rem', color: '#475569' }}>🗒️ {acc.notes}</div>}
 
-              <button
-                className='btn'
-                onClick={() => acc.id && remove.mutate(acc.id)}
-                disabled={!acc.id || remove.isPending}
-                style={{ marginTop: 'auto', background: '#ef4444', color: 'white', width: '100%', opacity: !acc.id || remove.isPending ? 0.6 : 1 }}
-              >
-                {remove.isPending ? '⏳ Removendo...' : '🗑️ Remover conta'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                <button
+                  className='btn'
+                  onClick={() => startEdit(acc)}
+                  disabled={!acc.id || remove.isPending || update.isPending}
+                  style={{ background: '#4f46e5', color: 'white', flex: 1, opacity: !acc.id || remove.isPending || update.isPending ? 0.6 : 1 }}
+                >
+                  {editingId === acc.id ? '✏️ Editando...' : '✏️ Editar'}
+                </button>
+                <button
+                  className='btn'
+                  onClick={() => acc.id && remove.mutate(acc.id)}
+                  disabled={!acc.id || remove.isPending}
+                  style={{ background: '#ef4444', color: 'white', flex: 1, opacity: !acc.id || remove.isPending ? 0.6 : 1 }}
+                >
+                  {remove.isPending ? '⏳ Removendo...' : '🗑️ Remover'}
+                </button>
+              </div>
             </div>
           )
         })}
