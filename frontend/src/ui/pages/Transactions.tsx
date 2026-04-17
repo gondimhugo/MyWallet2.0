@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 
 type EntryMode = 'compra-avista' | 'compra-credito' | 'entrada' | 'pagamento-fatura' | 'salario'
+type CreationMode = Exclude<EntryMode, 'pagamento-fatura'>
 
 interface TransactionForm {
   date: string
@@ -73,7 +74,7 @@ const MODE_META: Record<EntryMode, { label: string; icon: string; color: string;
     icon: '🧾',
     color: '#b45309',
     bg: '#fffbeb',
-    helper: 'Registre manualmente o pagamento de uma fatura de cartão. Em geral prefira a página de Faturas.',
+    helper: '',
   },
   salario: {
     label: 'Salário',
@@ -93,7 +94,7 @@ function categorizeTransaction(t: any): EntryMode {
 }
 
 export function Transactions() {
-  const [mode, setMode] = useState<EntryMode>('compra-avista')
+  const [mode, setMode] = useState<CreationMode>('compra-avista')
   const [form, setForm] = useState<TransactionForm>(initial)
   const [filterMode, setFilterMode] = useState<'all' | EntryMode>('all')
   const [installmentEnabled, setInstallmentEnabled] = useState(false)
@@ -135,11 +136,6 @@ export function Transactions() {
         case 'entrada':
           next.direction = 'Entrada'
           next.kind = 'Normal'
-          if (next.method === 'Crédito') next.method = 'Pix'
-          break
-        case 'pagamento-fatura':
-          next.direction = 'Saída'
-          next.kind = 'PagamentoFatura'
           if (next.method === 'Crédito') next.method = 'Pix'
           break
         case 'salario':
@@ -244,7 +240,7 @@ export function Transactions() {
     <div>
       <div className='card card-title'>
         <h2>Lançamentos</h2>
-        <div className='muted'>Compras, entradas e pagamentos</div>
+        <div className='muted'>Compras, entradas e salarios</div>
       </div>
 
       {/* Seletor de tipo de lançamento */}
@@ -261,7 +257,7 @@ export function Transactions() {
             marginTop: '4px',
           }}
         >
-          {(Object.keys(MODE_META) as EntryMode[]).map((m) => {
+          {(['compra-avista', 'compra-credito', 'entrada', 'salario'] as CreationMode[]).map((m) => {
             const meta = MODE_META[m]
             const active = mode === m
             return (
@@ -351,7 +347,7 @@ export function Transactions() {
         </div>
 
         {/* Método de pagamento — apenas para modos à vista / entrada / pagamento fatura */}
-        {(mode === 'compra-avista' || mode === 'entrada' || mode === 'pagamento-fatura' || mode === 'salario') && (
+        {(mode === 'compra-avista' || mode === 'entrada' || mode === 'salario') && (
           <div style={{ marginTop: '16px' }}>
             <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>
               🔄 {mode === 'entrada' || mode === 'salario' ? 'Como você recebeu' : 'Forma de pagamento'}
@@ -531,11 +527,9 @@ export function Transactions() {
                     ? 'Ex: Mercado, Netflix, Roupa...'
                     : mode === 'entrada'
                       ? 'Ex: Reembolso, Venda, Transferência recebida...'
-                      : mode === 'pagamento-fatura'
-                        ? 'Ex: Fatura Nubank Abril'
-                        : mode === 'salario'
-                          ? 'Ex: Salário Empresa X'
-                          : 'Ex: Supermercado, Farmácia, Uber...'
+                      : mode === 'salario'
+                        ? 'Ex: Salário Empresa X'
+                        : 'Ex: Supermercado, Farmácia, Uber...'
                 }
               />
             </div>
