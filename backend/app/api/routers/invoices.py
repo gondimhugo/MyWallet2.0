@@ -35,6 +35,16 @@ def invoices(db: Session = Depends(get_db), user: User = Depends(current_user)):
     return invoice_index(db, user.id)
 
 
+@router.get('/invoices/transactions')
+def invoice_transactions(invoice_key: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    txs = db.scalars(
+        select(Transaction).where(
+            and_(Transaction.user_id == user.id, Transaction.invoice_key == invoice_key)
+        ).order_by(Transaction.date.desc())
+    ).all()
+    return txs
+
+
 @router.post('/invoices/pay')
 def pay(payload: PayInvoiceIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     inv = next((x for x in invoice_index(db, user.id) if x['invoice_key'] == payload.invoice_key), None)
