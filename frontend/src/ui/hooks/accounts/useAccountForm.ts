@@ -6,7 +6,7 @@ import { type AccountForm, BANK_OPTIONS, initialAccountForm } from '../../types/
 export function useAccountForm() {
   const [form, setForm] = useState<AccountForm>(initialAccountForm)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const formRef = useRef<HTMLDivElement | null>(null)
+  const formRef = useRef<HTMLDivElement>(null)
   const qc = useQueryClient()
 
   const selectedBank = useMemo(() => BANK_OPTIONS.find((b) => b.code === form.bank) || BANK_OPTIONS[0], [form.bank])
