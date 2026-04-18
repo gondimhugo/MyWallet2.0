@@ -5,7 +5,7 @@ import { BANK_OPTIONS, CARD_TYPES, ACCOUNT_TYPES } from '../../types/accounts'
 interface Props {
   form: AccountForm
   onFormChange: (form: AccountForm) => void
-  formRef: RefObject<HTMLDivElement | null>
+  formRef: RefObject<HTMLDivElement>
   isEditing: boolean
   hasCredit: boolean
   isValid: boolean
