@@ -3,6 +3,7 @@ import { parseApiError } from '../../lib/validation'
 import { CashFlowEvents } from '../components/planning/cashflow/CashFlowEvents'
 import { CashFlowMetrics } from '../components/planning/cashflow/CashFlowMetrics'
 import { CashFlowTimeline } from '../components/planning/cashflow/CashFlowTimeline'
+import { LoansTab } from '../components/planning/loans/LoansTab'
 import { PlanningHeader } from '../components/planning/PlanningHeader'
 import { PlanningTabs } from '../components/planning/PlanningTabs'
 import { ScenarioForm } from '../components/planning/ScenarioForm'
@@ -11,11 +12,12 @@ import { usePlanningSimulation } from '../hooks/planning/usePlanningSimulation'
 import { TAB_LABELS, type PlanningTab } from '../types/planning'
 
 const TAB_STORAGE_KEY = 'mw:planningTab'
+const ENABLED_TABS: ReadonlyArray<PlanningTab> = ['cashflow', 'loans']
 
 function loadInitialTab(): PlanningTab {
   if (typeof window === 'undefined') return 'cashflow'
-  const stored = window.localStorage.getItem(TAB_STORAGE_KEY)
-  if (stored === 'cashflow') return stored
+  const stored = window.localStorage.getItem(TAB_STORAGE_KEY) as PlanningTab | null
+  if (stored && ENABLED_TABS.includes(stored)) return stored
   return 'cashflow'
 }
 
@@ -86,7 +88,9 @@ export function Planning() {
         </>
       )}
 
-      {activeTab !== 'cashflow' && (
+      {activeTab === 'loans' && <LoansTab />}
+
+      {activeTab !== 'cashflow' && activeTab !== 'loans' && (
         <div className='card centered muted' style={{ padding: 40, flexDirection: 'column', gap: 8 }}>
           <strong style={{ color: '#334155' }}>{TAB_LABELS[activeTab]}</strong>
           <span>Esta seção será habilitada nas próximas fases do redesign.</span>

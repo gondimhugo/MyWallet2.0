@@ -6,6 +6,7 @@ from app.api.routers import (
     cards,
     dashboard,
     invoices,
+    loans,
     planning,
     salary,
     settings,
@@ -22,5 +23,6 @@ api_router.include_router(transactions.router, tags=["transactions"])
 api_router.include_router(invoices.router, tags=["invoices"])
 api_router.include_router(dashboard.router, tags=["dashboard"])
 api_router.include_router(planning.router, tags=["planning"])
+api_router.include_router(loans.router, tags=["loans"])
 api_router.include_router(salary.router, tags=["salary"])
 api_router.include_router(settings.router, tags=["settings"])
