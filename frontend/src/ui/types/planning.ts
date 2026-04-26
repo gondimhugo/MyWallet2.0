@@ -8,6 +8,97 @@ export interface PlanningInput {
   endISO?: string | null
   includeInvoices: boolean
   creditAsCash: boolean
+  includeLoans: boolean
+}
+
+export type LoanDirection = 'taken' | 'granted'
+export type LoanInterestMode = 'simple' | 'compound'
+export type LoanStatus = 'active' | 'partial' | 'paid' | 'overdue'
+
+export interface Loan {
+  id: string
+  user_id: string
+  direction: LoanDirection
+  counterparty: string
+  principal: number
+  interest_rate: number
+  interest_mode: LoanInterestMode
+  start_date: string
+  due_date: string
+  status: LoanStatus
+  repaid_amount: number
+  linked_account_id: string | null
+  notes: string
+  expected_return: number
+  interest_amount: number
+  months: number
+  outstanding: number
+}
+
+export interface LoanFormData {
+  direction: LoanDirection
+  counterparty: string
+  principal: number
+  interest_rate: number
+  interest_mode: LoanInterestMode
+  start_date: string
+  due_date: string
+  linked_account_id: string | null
+  notes: string
+}
+
+export interface LoanScheduleRow {
+  month: number
+  date: string
+  interest_period: number
+  interest_accrued: number
+  balance: number
+}
+
+export interface LoanScheduleResponse {
+  loan: Loan
+  rows: LoanScheduleRow[]
+}
+
+export const LOAN_DIRECTION_LABELS: Record<LoanDirection, string> = {
+  taken: 'Tomado (devo)',
+  granted: 'Concedido (a receber)',
+}
+
+export const LOAN_INTEREST_MODE_LABELS: Record<LoanInterestMode, string> = {
+  simple: 'Juros simples',
+  compound: 'Juros compostos',
+}
+
+export const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
+  active: 'Ativo',
+  partial: 'Pago parcial',
+  paid: 'Quitado',
+  overdue: 'Vencido',
+}
+
+export const LOAN_STATUS_COLORS: Record<LoanStatus, string> = {
+  active: '#4f46e5',
+  partial: '#f59e0b',
+  paid: '#10b981',
+  overdue: '#ef4444',
+}
+
+export function initialLoanForm(): LoanFormData {
+  const today = new Date().toISOString().slice(0, 10)
+  const dueDate = new Date()
+  dueDate.setMonth(dueDate.getMonth() + 1)
+  return {
+    direction: 'taken',
+    counterparty: '',
+    principal: 0,
+    interest_rate: 0,
+    interest_mode: 'simple',
+    start_date: today,
+    due_date: dueDate.toISOString().slice(0, 10),
+    linked_account_id: null,
+    notes: '',
+  }
 }
 
 export interface PlanningEvent {
@@ -48,6 +139,7 @@ export const initialPlanningInput = (): PlanningInput => ({
   endISO: null,
   includeInvoices: true,
   creditAsCash: false,
+  includeLoans: true,
 })
 
 export type CashFlowMetricKey =
