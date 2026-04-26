@@ -12,11 +12,13 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     Card,
     Direction,
+    Loan,
     Method,
     SalaryProfile,
     Transaction,
     TransactionKind,
 )
+from app.services.loans import planning_event as loan_planning_event
 
 
 def clamp_day(year: int, month: int, day: int) -> date:
@@ -240,6 +242,20 @@ def planning_run(db: Session, user_id, params):
                             "forecast": True,
                         }
                     )
+    if getattr(params, "includeLoans", True):
+        loans = db.scalars(
+            select(Loan).where(
+                and_(
+                    Loan.user_id == user_id,
+                    Loan.due_date >= start,
+                    Loan.due_date <= end,
+                )
+            )
+        ).all()
+        for loan in loans:
+            event = loan_planning_event(loan)
+            if event is not None:
+                events.append(event)
     events.sort(key=lambda x: x["date"])
     running, min_cash, min_date = base, base, start.isoformat()
     series = []
