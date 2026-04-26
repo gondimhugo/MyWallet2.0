@@ -49,3 +49,25 @@ def ensure_transactions_columns(engine: Engine) -> None:
     with engine.begin() as conn:
         for name, ddl in missing:
             conn.execute(text(f"ALTER TABLE transactions ADD COLUMN {name} {ddl}"))
+
+
+USER_COLUMNS = {
+    "password_reset_token_hash": "VARCHAR(128)",
+    "password_reset_expires_at": "TIMESTAMP",
+    "last_login_at": "TIMESTAMP",
+}
+
+
+def ensure_users_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    current_columns = {col["name"] for col in inspector.get_columns("users")}
+    missing = [(name, ddl) for name, ddl in USER_COLUMNS.items() if name not in current_columns]
+    if not missing:
+        return
+
+    with engine.begin() as conn:
+        for name, ddl in missing:
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))

@@ -15,7 +15,7 @@ from app.api.routers import (
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
-api_router.include_router(users.router, tags=["users"])
+api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(accounts.router, prefix="/accounts", tags=["accounts"])
 api_router.include_router(cards.router, tags=["cards"])
 api_router.include_router(transactions.router, tags=["transactions"])

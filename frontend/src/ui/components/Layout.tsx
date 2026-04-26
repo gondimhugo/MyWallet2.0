@@ -7,6 +7,7 @@ const tabs = [
   ['/invoices', 'Faturas'],
   ['/planning', 'Planejamento'],
   ['/salary', 'Salário'],
+  ['/profile', 'Perfil'],
   ['/settings', 'Config'],
 ]
 
