@@ -47,6 +47,23 @@ class SalaryMode(str, enum.Enum):
     mensal = "mensal"
 
 
+class LoanDirection(str, enum.Enum):
+    taken = "taken"
+    granted = "granted"
+
+
+class LoanInterestMode(str, enum.Enum):
+    simple = "simple"
+    compound = "compound"
+
+
+class LoanStatus(str, enum.Enum):
+    active = "active"
+    partial = "partial"
+    paid = "paid"
+    overdue = "overdue"
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -182,4 +199,39 @@ class Transaction(Base):
     purchase_total: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Loan(Base):
+    __tablename__ = "loans"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    direction: Mapped[LoanDirection] = mapped_column(
+        Enum(LoanDirection), default=LoanDirection.taken, index=True
+    )
+    counterparty: Mapped[str] = mapped_column(String(120), default="")
+    principal: Mapped[float] = mapped_column(Float, default=0)
+    interest_rate: Mapped[float] = mapped_column(Float, default=0)
+    interest_mode: Mapped[LoanInterestMode] = mapped_column(
+        Enum(LoanInterestMode), default=LoanInterestMode.simple
+    )
+    start_date: Mapped[date] = mapped_column(Date, index=True)
+    due_date: Mapped[date] = mapped_column(Date, index=True)
+    status: Mapped[LoanStatus] = mapped_column(
+        Enum(LoanStatus), default=LoanStatus.active, index=True
+    )
+    repaid_amount: Mapped[float] = mapped_column(Float, default=0)
+    linked_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

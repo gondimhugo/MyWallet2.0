@@ -4,6 +4,7 @@ import { BudgetsTab } from '../components/planning/budgets/BudgetsTab'
 import { CashFlowEvents } from '../components/planning/cashflow/CashFlowEvents'
 import { CashFlowMetrics } from '../components/planning/cashflow/CashFlowMetrics'
 import { CashFlowTimeline } from '../components/planning/cashflow/CashFlowTimeline'
+import { LoansTab } from '../components/planning/loans/LoansTab'
 import { PlanningHeader } from '../components/planning/PlanningHeader'
 import { PlanningTabs } from '../components/planning/PlanningTabs'
 import { ScenarioForm } from '../components/planning/ScenarioForm'
@@ -12,6 +13,7 @@ import { usePlanningSimulation } from '../hooks/planning/usePlanningSimulation'
 import { TAB_LABELS, type PlanningTab } from '../types/planning'
 
 const TAB_STORAGE_KEY = 'mw:planningTab'
+const ENABLED_TABS: ReadonlyArray<PlanningTab> = ['cashflow', 'loans']
 
 function loadInitialTab(): PlanningTab {
   if (typeof window === 'undefined') return 'cashflow'

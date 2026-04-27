@@ -3,7 +3,15 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.db.models import Direction, Method, SalaryMode, TransactionKind
+from app.db.models import (
+    Direction,
+    LoanDirection,
+    LoanInterestMode,
+    LoanStatus,
+    Method,
+    SalaryMode,
+    TransactionKind,
+)
 
 
 class AccountIn(BaseModel):

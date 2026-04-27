@@ -7,6 +7,7 @@ from app.api.routers import (
     cards,
     dashboard,
     invoices,
+    loans,
     planning,
     salary,
     settings,

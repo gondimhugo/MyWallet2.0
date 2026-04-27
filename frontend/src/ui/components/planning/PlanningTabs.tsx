@@ -10,7 +10,7 @@ const ENABLED: Record<PlanningTab, boolean> = {
   cashflow: true,
   budgets: true,
   goals: false,
-  loans: false,
+  loans: true,
   scenarios: false,
 }
 

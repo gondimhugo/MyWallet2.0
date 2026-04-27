@@ -98,6 +98,21 @@ export function ScenarioForm({
           />
           <span style={{ fontWeight: 500 }}>Tratar compras no crédito como saída de caixa</span>
         </label>
+
+        <label
+          className='field'
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+        >
+          <input
+            type='checkbox'
+            checked={input.includeLoans}
+            onChange={(e) => onChange('includeLoans', e.target.checked)}
+            style={{ width: 18, height: 18 }}
+          />
+          <span style={{ fontWeight: 500 }}>
+            Incluir empréstimos com data de retorno no horizonte
+          </span>
+        </label>
       </div>
 
       <div className='form-actions'>
