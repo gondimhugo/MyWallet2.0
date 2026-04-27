@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { parseApiError } from '../../lib/validation'
+import { BudgetsTab } from '../components/planning/budgets/BudgetsTab'
 import { CashFlowEvents } from '../components/planning/cashflow/CashFlowEvents'
 import { CashFlowMetrics } from '../components/planning/cashflow/CashFlowMetrics'
 import { CashFlowTimeline } from '../components/planning/cashflow/CashFlowTimeline'
@@ -15,7 +16,7 @@ const TAB_STORAGE_KEY = 'mw:planningTab'
 function loadInitialTab(): PlanningTab {
   if (typeof window === 'undefined') return 'cashflow'
   const stored = window.localStorage.getItem(TAB_STORAGE_KEY)
-  if (stored === 'cashflow') return stored
+  if (stored === 'cashflow' || stored === 'budgets') return stored
   return 'cashflow'
 }
 
@@ -86,7 +87,9 @@ export function Planning() {
         </>
       )}
 
-      {activeTab !== 'cashflow' && (
+      {activeTab === 'budgets' && <BudgetsTab />}
+
+      {activeTab !== 'cashflow' && activeTab !== 'budgets' && (
         <div className='card centered muted' style={{ padding: 40, flexDirection: 'column', gap: 8 }}>
           <strong style={{ color: '#334155' }}>{TAB_LABELS[activeTab]}</strong>
           <span>Esta seção será habilitada nas próximas fases do redesign.</span>

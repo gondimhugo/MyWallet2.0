@@ -86,3 +86,26 @@ class PlanningInput(BaseModel):
     endISO: date | None = None
     includeInvoices: bool = True
     creditAsCash: bool = False
+
+
+class BudgetIn(BaseModel):
+    category: str
+    month: str  # YYYY-MM
+    amount_limit: float
+
+
+class BudgetOut(BaseModel):
+    id: UUID
+    category: str
+    month: str
+    amount_limit: float
+
+
+class BudgetProgress(BaseModel):
+    id: UUID
+    category: str
+    month: str
+    amount_limit: float
+    spent: float
+    remaining: float
+    pct: float
