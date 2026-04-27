@@ -8,7 +8,7 @@ interface Props {
 const TAB_ORDER: PlanningTab[] = ['cashflow', 'budgets', 'goals', 'loans', 'scenarios']
 const ENABLED: Record<PlanningTab, boolean> = {
   cashflow: true,
-  budgets: false,
+  budgets: true,
   goals: false,
   loans: true,
   scenarios: false,

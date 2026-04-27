@@ -94,43 +94,26 @@ class PlanningInput(BaseModel):
     endISO: date | None = None
     includeInvoices: bool = True
     creditAsCash: bool = False
-    includeLoans: bool = True
 
 
-class LoanIn(BaseModel):
-    direction: LoanDirection = LoanDirection.taken
-    counterparty: str = ""
-    principal: float
-    interest_rate: float = 0
-    interest_mode: LoanInterestMode = LoanInterestMode.simple
-    start_date: date
-    due_date: date
-    linked_account_id: UUID | None = None
-    notes: str = ""
+class BudgetIn(BaseModel):
+    category: str
+    month: str  # YYYY-MM
+    amount_limit: float
 
 
-class LoanRepayIn(BaseModel):
-    amount: float
-    payment_date: date | None = None
-
-
-class LoanOut(BaseModel):
+class BudgetOut(BaseModel):
     id: UUID
-    user_id: UUID
-    direction: LoanDirection
-    counterparty: str
-    principal: float
-    interest_rate: float
-    interest_mode: LoanInterestMode
-    start_date: date
-    due_date: date
-    status: LoanStatus
-    repaid_amount: float
-    linked_account_id: UUID | None
-    notes: str
-    expected_return: float
-    interest_amount: float
-    months: int
-    outstanding: float
+    category: str
+    month: str
+    amount_limit: float
 
-    model_config = {"from_attributes": True}
+
+class BudgetProgress(BaseModel):
+    id: UUID
+    category: str
+    month: str
+    amount_limit: float
+    spent: float
+    remaining: float
+    pct: float

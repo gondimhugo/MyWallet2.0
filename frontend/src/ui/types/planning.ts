@@ -125,6 +125,39 @@ export interface PlanningOutput {
   events: PlanningEvent[]
 }
 
+// ── Budgets ─────────────────────────────────────────────────────────────────
+
+export interface Budget {
+  id: string
+  category: string
+  month: string  // YYYY-MM
+  amount_limit: number
+}
+
+export interface BudgetProgress {
+  id: string
+  category: string
+  month: string
+  amount_limit: number
+  spent: number
+  remaining: number
+  pct: number
+}
+
+export interface BudgetFormData {
+  category: string
+  month: string
+  amount_limit: number | ''
+}
+
+export const initialBudgetForm = (month: string): BudgetFormData => ({
+  category: '',
+  month,
+  amount_limit: '',
+})
+
+// ── Horizon ──────────────────────────────────────────────────────────────────
+
 export const HORIZON_LABELS: Record<HorizonMode, string> = {
   nextSalary: 'Até o próximo salário',
   nextDue: 'Até o próximo vencimento',
